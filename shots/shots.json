@@ -1,0 +1,293 @@
+{
+ "note": "镜头清单：可用 tools/shots_render.py house-plan.json shots/shots.json <outdir> 重新渲染",
+ "shots": [
+  {
+   "id": "ext-se",
+   "floor": 1,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 2700,
+    "y": 1900,
+    "eye": 500
+   },
+   "target": {
+    "x": 700,
+    "y": -150,
+    "eye": 150
+   },
+   "fov": 45,
+   "sun": {
+    "az": 150,
+    "el": 42
+   },
+   "roof": {
+    "style": "slope",
+    "pitch": 30,
+    "eave": 60
+   },
+   "title": "外观·东南角"
+  },
+  {
+   "id": "ext-south",
+   "floor": 1,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 760,
+    "y": 2600,
+    "eye": 260
+   },
+   "target": {
+    "x": 760,
+    "y": 0,
+    "eye": 280
+   },
+   "fov": 48,
+   "sun": {
+    "az": 160,
+    "el": 42
+   },
+   "roof": {
+    "style": "slope",
+    "pitch": 30,
+    "eave": 60
+   },
+   "title": "外观·正南立面"
+  },
+  {
+   "id": "aerial",
+   "floor": 1,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 2000,
+    "y": 2300,
+    "eye": 2300
+   },
+   "target": {
+    "x": 720,
+    "y": -200,
+    "eye": 0
+   },
+   "fov": 42,
+   "sun": {
+    "az": 150,
+    "el": 50
+   },
+   "roof": {
+    "style": "slope",
+    "pitch": 30,
+    "eave": 60
+   },
+   "title": "外观·鸟瞰屋顶"
+  },
+  {
+   "id": "court-west",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 330,
+    "y": -295,
+    "eye": 160
+   },
+   "target": {
+    "x": 1100,
+    "y": -295,
+    "eye": 130
+   },
+   "fov": 65,
+   "sun": {
+    "az": 150,
+    "el": 55
+   },
+   "title": "庭院·从西端看"
+  },
+  {
+   "id": "moon-gate",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 1330,
+    "y": -250,
+    "eye": 140
+   },
+   "target": {
+    "x": 420,
+    "y": -330,
+    "eye": 125
+   },
+   "fov": 62,
+   "sun": {
+    "az": 150,
+    "el": 55
+   },
+   "title": "庭院·透过月洞窗"
+  },
+  {
+   "id": "court-2f",
+   "floor": 1,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 700,
+    "y": -40,
+    "eye": 150
+   },
+   "target": {
+    "x": 800,
+    "y": -560,
+    "eye": 40
+   },
+   "fov": 72,
+   "sun": {
+    "az": 150,
+    "el": 55
+   },
+   "roof": {
+    "style": "slope",
+    "pitch": 30,
+    "eave": 60
+   },
+   "title": "庭院·二层回廊俯看"
+  },
+  {
+   "id": "arcade",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 340,
+    "y": -528,
+    "eye": 150
+   },
+   "target": {
+    "x": 1300,
+    "y": -530,
+    "eye": 140
+   },
+   "fov": 75,
+   "ceiling": true,
+   "sun": {
+    "az": 150,
+    "el": 55
+   },
+   "title": "廊下·一层回廊"
+  },
+  {
+   "id": "stair",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 650,
+    "y": -420,
+    "eye": 150
+   },
+   "target": {
+    "x": 200,
+    "y": -250,
+    "eye": 150
+   },
+   "fov": 68,
+   "sun": {
+    "az": 150,
+    "el": 55
+   },
+   "title": "楼梯·镂空钢木双跑"
+  },
+  {
+   "id": "hall",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 130,
+    "y": -700,
+    "eye": 150
+   },
+   "target": {
+    "x": 1100,
+    "y": -850,
+    "eye": 100
+   },
+   "fov": 78,
+   "ceiling": true,
+   "sun": {
+    "az": 170,
+    "el": 40
+   },
+   "title": "一层·厨房餐厅"
+  },
+  {
+   "id": "bedroom-1f",
+   "floor": 0,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 215,
+    "y": 255,
+    "eye": 150
+   },
+   "target": {
+    "x": 430,
+    "y": 470,
+    "eye": 80
+   },
+   "fov": 80,
+   "ceiling": true,
+   "sun": {
+    "az": 170,
+    "el": 40
+   },
+   "title": "一层·卧室"
+  },
+  {
+   "id": "master-2f",
+   "floor": 1,
+   "size": [
+    1536,
+    1024
+   ],
+   "cam": {
+    "x": 1370,
+    "y": -640,
+    "eye": 150
+   },
+   "target": {
+    "x": 1050,
+    "y": -980,
+    "eye": 90
+   },
+   "fov": 80,
+   "ceiling": true,
+   "sun": {
+    "az": 170,
+    "el": 40
+   },
+   "title": "二层·主卧"
+  }
+ ]
+}
