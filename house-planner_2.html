@@ -358,6 +358,7 @@
       <div id="view3d" hidden>
         <div id="editHint" hidden>编辑模式：左键 选中 / 拖动（工具栏选了工具就直接在 3D 里画或摆放）· 右键 转动视角 · 中键 平移 · 滚轮 缩放 · Alt+拖动 调离地高度 · R 旋转 · Delete 删除 · Ctrl+Z 撤销</div>
         <div id="view3dBar">
+          <span class="vgrp" title="工程级风格预设：整体改墙色、瓦色、木色、光照；新画的屋顶默认歇山+微曲面"><span class="vlbl">风格</span><select id="v3Style"><option value="modern">现代</option><option value="song">宋式</option></select></span>
           <span class="vgrp"><span class="vlbl">显示到</span><select id="v3Floor"></select></span>
           <span class="vgrp"><span class="vlbl">视角</span>
             <button class="small" data-view="iso">透视</button><button class="small" data-view="top">俯视</button>
@@ -549,6 +550,13 @@ const FURNITURE_DEFS = {
   'stone-table':   {label:'圆石桌',     w:80,  h:80,  icon:'stone', hz:75, round:true},
   'stone-stool':   {label:'石鼓凳',     w:36,  h:36,  icon:'stone', hz:45, round:true},
   'stone-bench':   {label:'石长凳',     w:140, h:38,  icon:'stone', hz:45},
+  // 宋式：线条简洁，素木本色
+  'song-armchair': {label:'圈椅',   w:60,  h:58,  icon:'songchair', hz:100},
+  'song-console':  {label:'条案',   w:180, h:40,  icon:'songtable', hz:92},
+  'song-screen':   {label:'屏风',   w:200, h:30,  icon:'songscreen', hz:170},
+  'song-daybed':   {label:'罗汉床', w:200, h:95,  icon:'songbed', hz:80},
+  'song-shelf':    {label:'博古架', w:100, h:32,  icon:'songshelf', hz:200},
+  'song-stand':    {label:'花几',   w:36,  h:36,  icon:'songstand', hz:80, round:true},
   // 车辆：w=车宽，h=车长，车头朝本地 +y（rot=0 车头朝画布下方，与人物/家具"正面朝下"一致）；cab=[车厢长占车长比例, 车厢中心相对车中心偏移比例]
   'car-small':     {label:'小型车',     w:168, h:400, icon:'car', hz:150, cab:[.55,-.04]},
   'car-sedan':     {label:'轿车',       w:185, h:470, icon:'car', hz:145, cab:[.46,-.07]},
@@ -561,6 +569,7 @@ const FURNITURE_CATS = [
   {label:'厨房', items:['stove','kitchen-sink','fridge','kitchen-cabinet','wall-cabinet','washer']},
   {label:'卫生间', items:['toilet','bathtub','bath-sink','shower']},
   {label:'庭院', items:['stone-table','stone-stool','stone-bench']},
+  {label:'宋式', items:['song-armchair','song-console','song-screen','song-daybed','song-shelf','song-stand']},
   {label:'车辆', items:['car-small','car-sedan','car-suv']}
 ];
 // 每件家具可以单独设置高度 hz 和离地高度 elev（只影响 3D 和场景描述）；没设就用该类型的默认值。
@@ -1276,7 +1285,7 @@ function drawAreaPattern(mat, x1,y1,x2,y2, color){
   ctx.globalAlpha = 1;
   ctx.restore();
 }
-const ROOF_STYLES = { slope:'四坡', gable:'双坡（人字）', flat:'平顶（可带女儿墙）', shed:'单坡' };
+const ROOF_STYLES = { slope:'四坡', gable:'双坡（人字）', xieshan:'歇山（宋式）', flat:'平顶（可带女儿墙）', shed:'单坡' };
 function drawRoof(rf, isSel){   // 2D：虚线框 + 示意线（四坡=对角线，双坡=屋脊，单坡=坡向箭头，平顶=女儿墙内框）
   const [x1,y1] = worldToScreen(rf.x1, rf.y1), [x2,y2] = worldToScreen(rf.x2, rf.y2), w=x2-x1, h=y2-y1, cx=(x1+x2)/2, cy=(y1+y2)/2;
   ctx.save();
@@ -1284,7 +1293,7 @@ function drawRoof(rf, isSel){   // 2D：虚线框 + 示意线（四坡=对角线
   ctx.strokeStyle = isSel ? getCss('--accent') : '#b06040'; ctx.lineWidth = isSel?2:1.5; ctx.setLineDash([8,4]); ctx.strokeRect(x1,y1,w,h); ctx.setLineDash([]);
   ctx.lineWidth = 1; ctx.beginPath();
   const m = Math.min(w,h)/2;
-  if(rf.style==='slope'){
+  if(rf.style==='slope' || rf.style==='xieshan'){
     ctx.moveTo(x1,y1); ctx.lineTo(x1+m,y1+m); ctx.moveTo(x2,y1); ctx.lineTo(x2-m,y1+m); ctx.moveTo(x1,y2); ctx.lineTo(x1+m,y2-m); ctx.moveTo(x2,y2); ctx.lineTo(x2-m,y2-m);
     if(w>=h){ ctx.moveTo(x1+m,cy); ctx.lineTo(x2-m,cy); } else { ctx.moveTo(cx,y1+m); ctx.lineTo(cx,y2-m); }
   } else if(rf.style==='gable'){
@@ -1775,6 +1784,11 @@ function drawOpening(op, isSel){
       else if(st==='square'){ ctx.moveTo(mx-r,my-r); ctx.lineTo(mx+r,my-r); ctx.lineTo(mx+r,my+r); ctx.lineTo(mx-r,my+r); ctx.closePath(); }
       else { ctx.moveTo(mx,my-r*1.3); ctx.lineTo(mx+r*1.3,my); ctx.lineTo(mx,my+r*1.3); ctx.lineTo(mx-r*1.3,my); ctx.closePath(); }
       ctx.stroke(); ctx.restore();
+    } else if(st==='zhiling' || st==='gezi'){
+      // 直棂窗/格子窗：双线窗框 + 一排竖向细棂
+      ctx.beginPath(); L(sx1+nx*off,sy1+ny*off, sx2+nx*off,sy2+ny*off); L(sx1-nx*off,sy1-ny*off, sx2-nx*off,sy2-ny*off);
+      const nb = Math.max(3,Math.round(nlen/6)); for(let k=0;k<=nb;k++){ const t=k/nb, px=sx1+(sx2-sx1)*t, py=sy1+(sy2-sy1)*t; L(px+nx*off,py+ny*off, px-nx*off,py-ny*off); }
+      ctx.stroke();
     } else if(st==='casement'){
       // 平开窗：双线窗框 + 两扇向一侧（内/外开）打开的窗扇和 90° 弧线
       ctx.beginPath(); L(sx1+nx*off,sy1+ny*off, sx2+nx*off,sy2+ny*off); L(sx1-nx*off,sy1-ny*off, sx2-nx*off,sy2-ny*off); ctx.stroke();
@@ -2492,7 +2506,7 @@ window.addEventListener('pointerup', ()=>{
       if(w>=60 && h>=60){
         pushHistory();
         const rf = {id:newId(), x1:Math.min(drawState.x1,drawState.x2), y1:Math.min(drawState.y1,drawState.y2), x2:Math.max(drawState.x1,drawState.x2), y2:Math.max(drawState.y1,drawState.y2),
-          style:'slope', pitch:30, eave:50, ridge:'auto', dir:'n', parapet:30, lift:0, z:nextLayerZ()};
+          style:project.style==='song'?'xieshan':'slope', pitch:project.style==='song'?26:30, curve:project.style==='song'?.6:0, eave:project.style==='song'?90:50, ridge:'auto', dir:'n', parapet:30, lift:0, z:nextLayerZ()};
         state.roofs.push(rf);
         selection = {type:'roof', id:rf.id};
       }
@@ -3389,6 +3403,7 @@ function showPanel(){
     }
     el.innerHTML = `
       <h2>${kindLabel}属性</h2>
+      ${op.kind==='door' ? `<div class="field"><label>门型</label><select id="oDoorStyle"><option value="" ${op.style?'':'selected'}>普通（洞口+门套）</option><option value="gezi" ${op.style==='gezi'?'selected':''}>格子门（宋式：裙板+棂条+宣纸）</option></select></div>` : ''}
       ${wst?`<div class="field"><label>窗型（改窗型会把宽度/离地/洞口高重置为该窗型默认值）</label>
         <select id="oStyle">${Object.keys(WINDOW_STYLES).map(k=>`<option value="${k}" ${wst===k?'selected':''}>${WINDOW_STYLES[k].label}</option>`).join('')}</select></div>`:''}
       <div class="field"><label>${wst&&WINDOW_STYLES[wst].hole?'宽度/直径 (cm)':'宽度 (cm)'}</label><input type="number" id="oWidth" value="${op.width}" min="30" max="400"></div>
@@ -3401,6 +3416,7 @@ function showPanel(){
       <div class="hint">离地高/洞口高只影响 3D 预览和场景描述（落地窗离地填 0，高窗填 150 以上）。可在画布上直接拖动改变沿墙位置。开门方向决定铰链在哪一端，开启方式决定门扇朝墙的哪一侧摆动，两者互相独立，与整体旋转无关。</div>
       <button class="small danger" id="oDel" style="width:100%;">删除</button>
     `;
+    if(document.getElementById('oDoorStyle')) document.getElementById('oDoorStyle').onchange = (e)=>{ pushHistory(); if(e.target.value) op.style = e.target.value; else delete op.style; render(); };
     document.getElementById('oWidth').onchange = (e)=>{ pushHistory(); op.width=Math.max(30,+e.target.value||90); render(); if(windowStyle(op)==='round') showPanel(); };
     if(wst) document.getElementById('oStyle').onchange = (e)=>{
       pushHistory(); const d = WINDOW_STYLES[e.target.value];
@@ -3506,6 +3522,7 @@ function showPanel(){
     el.innerHTML = `
       <h2>屋顶</h2>
       <div class="field"><label>形状</label><select id="rfStyle">${Object.keys(ROOF_STYLES).map(k=>`<option value="${k}" ${sty===k?'selected':''}>${ROOF_STYLES[k]}</option>`).join('')}</select></div>
+      ${sty!=='flat' && sty!=='shed' ? numF('rfCurve','曲面程度 (0~100，宋式微凹+翘角)',Math.round((rf.curve||0)*100),0,100,10) : ''}
       ${sty!=='flat' ? numF('rfPitch','坡度 (°)',rf.pitch??30,5,60,5) : numF('rfParapet','女儿墙高 (cm，0=无)',rf.parapet??30,0,150,10)}
       ${numF('rfEave','出檐 (cm)',rf.eave??50,0,150,10)}
       ${sty==='gable' ? `<div class="field"><label>屋脊方向</label><select id="rfRidge"><option value="auto" ${(rf.ridge||'auto')==='auto'?'selected':''}>自动（顺着长边）</option><option value="x" ${rf.ridge==='x'?'selected':''}>东西向</option><option value="y" ${rf.ridge==='y'?'selected':''}>南北向</option></select></div>` : ''}
@@ -3524,7 +3541,7 @@ function showPanel(){
     const rs = (id,k,conv)=>{ const e=document.getElementById(id); if(e) e.onchange = ev=>{ pushHistory(); rf[k]=conv?conv(ev.target):ev.target.value; showPanel(); render(); }; };
     const num = (lo,hi,d)=> t=> Math.min(hi,Math.max(lo,+t.value||d));
     rs('rfStyle','style'); rs('rfPitch','pitch',num(5,60,30)); rs('rfParapet','parapet',t=>Math.min(150,Math.max(0,+t.value||0))); rs('rfEave','eave',t=>Math.min(150,Math.max(0,+t.value||0)));
-    rs('rfRidge','ridge'); rs('rfDir','dir'); rs('rfLift','lift',t=>Math.min(300,Math.max(-200,+t.value||0)));
+    rs('rfCurve','curve',t=>Math.min(1,Math.max(0,(+t.value||0)/100))); rs('rfRidge','ridge'); rs('rfDir','dir'); rs('rfLift','lift',t=>Math.min(300,Math.max(-200,+t.value||0)));
     document.getElementById('rfW').onchange = ev=>{ pushHistory(); rf.x2 = Math.min(rf.x1,rf.x2) + Math.max(60,+ev.target.value||w); rf.x1 = Math.min(rf.x1,rf.x2<rf.x1?rf.x2:rf.x1); render(); showPanel(); };
     document.getElementById('rfH').onchange = ev=>{ pushHistory(); rf.y2 = Math.min(rf.y1,rf.y2) + Math.max(60,+ev.target.value||h); rf.y1 = Math.min(rf.y1,rf.y2<rf.y1?rf.y2:rf.y1); render(); showPanel(); };
     document.getElementById('rfX').onchange = ev=>{ pushHistory(); const nx=+ev.target.value||0; rf.x2 = nx+w; rf.x1 = nx; render(); showPanel(); };
@@ -3795,7 +3812,7 @@ function showPanel(){
 // 兼容旧版本（单层，无 floors 结构）的存档/导入数据
 function normalizeProject(data){
   if(data && Array.isArray(data.floors)){
-    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors, unitCost: data.unitCost, grid: data.grid };
+    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors, unitCost: data.unitCost, grid: data.grid, style: data.style };
   }
   if(data && Array.isArray(data.walls)){
     return { floors:[ensureFloorShape({id:0, name:'1层', walls:data.walls||[], openings:data.openings||[], labels:data.labels||[]})], currentFloor:0, nextId:data.nextId||1 };
@@ -4060,6 +4077,7 @@ function generateSceneDescription(){
   lines.push(`生成时间：${new Date().toLocaleString()}`);
   lines.push('说明：坐标单位统一为厘米(cm)，沿用画布的世界坐标系（同一楼层内可直接比较大小/远近；不同楼层共用同一套X/Y水平参照，垂直方向的层高见各楼层小节）。“未归入房间”指该物件的坐标没有落在任何一个被墙体围合识别出来的房间范围内，通常是庭院/室外物件，也可能是房间墙体没围合完整导致识别不到。');
   lines.push('屋顶：每层的屋顶是独立元素，见各楼层小节的“屋顶”条目（架在该层墙顶上）。');
+  if(project.style==='song') lines.push('风格：宋式（暖石灰白墙、青灰瓦、素木本色、低饱和配色、柔和漫射光；留白、简约、对称）。');
   lines.push('');
   project.floors.forEach((floor, fi)=>{
     state = floor; // 临时切到这一层，复用 detectRooms()/roomIndexAt() 等既有逻辑
@@ -4118,7 +4136,7 @@ function generateSceneDescription(){
     lines.push('');
 
     (floor.columns||[]).forEach((c,ci)=> lines.push(`- 柱 Z${ci+1}：${c.shape==='round' ? '圆柱 直径'+c.w : '方柱 '+c.w+'×'+(c.d||c.w)}cm，中心 (${c.x.toFixed(0)}, ${c.y.toFixed(0)})，${typeof c.hz==='number' ? '高 '+c.hz+'cm' : '通层高'}`));
-    (floor.roofs||[]).forEach((rf,ri)=> lines.push(`- 屋顶 R${ri+1}：${ROOF_STYLES[rf.style]||rf.style}，范围 X[${Math.min(rf.x1,rf.x2).toFixed(0)}, ${Math.max(rf.x1,rf.x2).toFixed(0)}] Y[${Math.min(rf.y1,rf.y2).toFixed(0)}, ${Math.max(rf.y1,rf.y2).toFixed(0)}]，${rf.style==='flat' ? '女儿墙 '+(rf.parapet||0)+'cm' : '坡度 '+rf.pitch+'°'+(rf.style==='shed' ? '，高的一侧在'+({n:'北',s:'南',w:'西',e:'东'}[rf.dir||'n']) : '')}，出檐 ${rf.eave}cm${rf.lift?'，相对墙顶'+(rf.lift>0?'抬高':'下沉')+Math.abs(rf.lift)+'cm':''}`));
+    (floor.roofs||[]).forEach((rf,ri)=> lines.push(`- 屋顶 R${ri+1}：${ROOF_STYLES[rf.style]||rf.style}，范围 X[${Math.min(rf.x1,rf.x2).toFixed(0)}, ${Math.max(rf.x1,rf.x2).toFixed(0)}] Y[${Math.min(rf.y1,rf.y2).toFixed(0)}, ${Math.max(rf.y1,rf.y2).toFixed(0)}]，${rf.style==='flat' ? '女儿墙 '+(rf.parapet||0)+'cm' : '坡度 '+rf.pitch+'°'+(rf.curve ? '，曲面'+Math.round(rf.curve*100)+'%（屋面微凹、檐角起翘）' : '')+(rf.style==='shed' ? '，高的一侧在'+({n:'北',s:'南',w:'西',e:'东'}[rf.dir||'n']) : '')}，出檐 ${rf.eave}cm${rf.lift?'，相对墙顶'+(rf.lift>0?'抬高':'下沉')+Math.abs(rf.lift)+'cm':''}`));
     if(floor.areas.length){
       lines.push('#### 场地要素（硬化地面/绿化/水景构筑）');
       floor.areas.forEach((ar, ai)=>{
@@ -4547,7 +4565,8 @@ const OPENING_3D = { door:{sill:0,h:210}, window:{sill:90,h:120}, gate:{sill:0,h
 const WINDOW_STYLES = {
   sliding:{label:'推拉窗', w:150, sill:90, h:120}, casement:{label:'平开窗', w:120, sill:90, h:120},
   round:{label:'圆洞', w:100, sill:100, h:100, hole:true}, square:{label:'方洞', w:100, sill:100, h:100, hole:true},
-  diamond:{label:'菱形洞', w:100, sill:100, h:100, hole:true}
+  diamond:{label:'菱形洞', w:100, sill:100, h:100, hole:true},
+  zhiling:{label:'直棂窗（竖向格栅，宋式）', w:150, sill:90, h:120}, gezi:{label:'格子窗（方格+宣纸，宋式）', w:120, sill:90, h:120}
 };
 function windowStyle(op){ return op.kind==='window' ? (WINDOW_STYLES[op.style] ? op.style : 'sliding') : null; }
 function openingDims(op){
@@ -4604,9 +4623,16 @@ function buildSlopeRoof(parent, rects, yBase, rc, material){
     const c0=Math.round((r.x-gx0)/S), c1=Math.round((r.x+r.w-gx0)/S), r0=Math.round((r.y-gy0)/S), r1=Math.round((r.y+r.h-gy0)/S);
     for(let y=r0;y<r1;y++) for(let x=c0;x<c1;x++) inside[y*cols+x]=1;
   });
-  const gable = rc.style==='gable';
+  const gable = rc.style==='gable', xs = rc.style==='xieshan', cv = rc.curve||0;
   let dArr;
-  if(gable){
+  if(xs){   // 歇山：长向两端各留出「收山」，端部是下半截四坡，收山线以内是两坡，收山线处露出山花（竖直的三角面）
+    dArr = new Float32Array(cols*rows);
+    const alongX = rc.ridge==='x' || (rc.ridge!=='y' && (x2-x1)>=(y2-y1)), Lr = alongX ? x2-x1 : y2-y1, sIn = Math.min(Lr*.2, 300);
+    for(let j=0;j<rows;j++) for(let i=0;i<cols;i++){
+      const wx = gx0+(i+.5)*S, wz = gy0+(j+.5)*S, ex = Math.min(wx-x1, x2-wx), ez = Math.min(wz-y1, y2-wz), cross = alongX ? ez : ex, along = alongX ? ex : ez;
+      dArr[j*cols+i] = along < sIn ? Math.min(cross, along) : cross;
+    }
+  } else if(gable){
     const alongX = rc.ridge==='x' || (rc.ridge!=='y' && (x2-x1)>=(y2-y1)); // auto：屋脊顺着长边
     dArr = gableField(inside, cols, rows, S, alongX, rc.eave, SPAN);
   } else {
@@ -4641,14 +4667,20 @@ function buildSlopeRoof(parent, rects, yBase, rc, material){
       }
     }
   }
-  const tan = Math.tan(rc.pitch*Math.PI/180), hCap = gable ? 1e9 : MAXD;
+  const tan = Math.tan(rc.pitch*Math.PI/180), hCap = (gable||xs) ? 1e9 : MAXD, corners = [[x1,y1],[x2,y1],[x1,y2],[x2,y2]], Rc = Math.min(rc.eave+150, 250);
   const vc = Math.floor(cols*S/V)+1, vr = Math.floor(rows*S/V)+1;
   const pos = new Float32Array(vc*vr*3), dv = new Float32Array(vc*vr), uvs = new Float32Array(vc*vr*2), cosP = Math.cos(rc.pitch*Math.PI/180);
   for(let j=0;j<vr;j++) for(let i=0;i<vc;i++){
     const cx = Math.min(cols-1, Math.round(i*V/S)), cy = Math.min(rows-1, Math.round(j*V/S));
     const d = dArr[cy*cols+cx], k = j*vc+i; dv[k] = d;
     const dc = Math.min(Math.max(d,-rc.eave),hCap);
-    pos.set([(gx0+i*V)/100, yBase+dc*tan/100, (gy0+j*V)/100], k*3);
+    let hgt = dc*tan;
+    if(cv>0){   // 宋式曲面：屋面微凹（檐口缓、屋脊处陡），四角檐口轻轻起翘
+      hgt = tan*(dc + cv*.6*dc*(dc+2*rc.eave)/600);
+      const wx = gx0+i*V, wz = gy0+j*V, cd = Math.min(...corners.map(([cx_,cz_])=>Math.hypot(wx-cx_,wz-cz_))), wgt = d<=0 ? 1 : Math.max(0,1-d/80);
+      hgt += cv*30*Math.pow(Math.max(0,1-cd/Rc),2)*wgt;
+    }
+    pos.set([(gx0+i*V)/100, yBase+hgt/100, (gy0+j*V)/100], k*3);
     // 瓦的 UV：v=沿坡向的距离（瓦行平行于屋檐），u=沿屋檐方向（瓦垄顺着坡走）；方向取自该点的坡度梯度，所以四个坡的瓦垄都对
     const gxp = dArr[cy*cols+Math.min(cols-1,cx+2)]-dArr[cy*cols+Math.max(0,cx-2)], gzp = dArr[Math.min(rows-1,cy+2)*cols+cx]-dArr[Math.max(0,cy-2)*cols+cx], gl = Math.hypot(gxp,gzp);
     const tx = gl>1e-3 ? -gzp/gl : 1, tz = gl>1e-3 ? gxp/gl : 0;
@@ -4703,6 +4735,40 @@ function furnitureParts(fu, H){
     if(fu.kind==='stone-table'){ cy('rock',0,0,0,w*.5,6,d*.5); cy('rock',0,6,0,w*.22,H-14,d*.22); cy('rock',0,H-8,0,w,8,d); }   // 底座+中柱+圆桌面
     else if(fu.kind==='stone-stool'){ cy('rock',0,0,0,w,4,d); cy('rock',0,4,0,w*.86,H-8,d*.86); cy('rock',0,H-4,0,w,4,d); }       // 鼓形凳：上下收口
     else { [-1,1].forEach(sx=> bx('rock',sx*(w/2-14),0,0,12,H-8,d-6)); bx('rock',0,H-8,0,w,8,d); }                                  // 两块石墩+一块石板
+  } else if(icon==='songchair'){   // 圈椅：四腿 + 座面 + 一圈马蹄形扶手（后半圆 + 前伸）+ 靠背板
+    const seatH = 48, armY = seatH+24, r = w/2-5, zf = d/2-5, cz0 = -d/2+r+3, n = 9;
+    corners.forEach(([sx,sz])=> cy('sowood',sx*r,0,sz*zf,3.4,sz>0?armY:seatH,3.4));
+    bx('sowood',0,seatH-3,0,w-4,3.5,d-4); soft('oat',0,seatH+.5,0,w-12,3,d-12);
+    bx('sowood',0,seatH,-d/2+7,9,H-seatH-8,2.6,{rx:-.12});                                  // 靠背板（微后倾）
+    for(let i=0;i<n;i++){ const a0 = Math.PI*(1+i/n), a1 = Math.PI*(1+(i+1)/n), am = (a0+a1)/2;
+      bx('sowood', r*Math.cos(am), armY, cz0+r*Math.sin(am), r*Math.PI/n*1.15, 3.2, 3.2, {ry:-(am+Math.PI/2)}); }   // 后半圆
+    [-1,1].forEach(sg=> bx('sowood', sg*r, armY, (cz0+zf)/2, 3.2, 3.2, zf-cz0));              // 两侧伸向前腿的扶手
+  } else if(icon==='songtable'){   // 条案：案面两端翘头 + 两侧板足 + 牙条
+    bx('sowood',0,H-5,0,w,5,d);
+    [-1,1].forEach(sg=>{ bx('sowood',sg*(w/2-1.5),H,0,3,4,d); bx('sowood',sg*(w/2-14),0,0,5,H-5,d-8); });
+    bx('sowood',0,H-14,0,w-38,9,2.4);
+  } else if(icon==='songscreen'){   // 屏风：落地一字屏，多扇素纸 + 木框 + 两端墩座
+    const np = Math.max(3,Math.round(w/50)), pw = (w-8)/np, top = H-6;
+    [-1,1].forEach(sg=> bx('sowood',sg*(w/2-10),0,0,14,9,d));
+    for(let i=0;i<np;i++) bx('paper',-w/2+4+pw*(i+.5),14,0,pw-3.5,top-18,1.2);
+    for(let i=0;i<=np;i++) bx('sowood',-w/2+4+pw*i,9,0,3,top-9,3);
+    bx('sowood',0,top-4,0,w-4,4,3); bx('sowood',0,11,0,w-4,4,3);
+  } else if(icon==='songbed'){   // 罗汉床：三面围子 + 床面软垫 + 小几
+    bx('sowood',0,22,0,w,7,d); bx('sowood',0,15,0,w-8,7,d-8);
+    corners.forEach(([sx,sz])=> cy('sowood',sx*(w/2-6),0,sz*(d/2-6),6,15,6));
+    bx('sowood',0,29,-d/2+2.5,w,34,4); [-1,1].forEach(sg=> bx('sowood',sg*(w/2-2.5),29,0,4,22,d));
+    soft('oat',0,29,3,w-14,7,d-16); bx('sowood',0,36,3,56,13,34); cy('celadon',8,49,3,9,6,9);
+  } else if(icon==='songshelf'){   // 博古架：高低错落的方格 + 青瓷摆件
+    const cw = (w-6)/3; bx('sowood',0,0,0,w,8,d); bx('sowood',0,H-4,0,w,4,d); bx('sowood',0,8,-d/2+1,w-3,H-12,1.4);
+    [-1,1].forEach(sg=> bx('sowood',sg*(w/2-1.5),8,0,3,H-12,d-1));
+    for(let c=0;c<3;c++){ const cx=-w/2+3+cw*(c+.5), n=3+(rn()<.5?1:0); let yPrev=8;
+      for(let k=0;k<n;k++){ const y=8+(H-16)*(k+.7+rn()*.35)/(n+.5); bx('sowood',cx,y,0,cw-1,2.4,d-3);
+        if(rn()<.75){ if(rn()<.5) cy('celadon',cx+(rn()-.5)*cw*.3,yPrev+2.4*(k>0),0,8+rn()*4,10+rn()*12,8+rn()*4); else sp('celadon',cx,yPrev+2.4*(k>0)+5,0,10,10,10); }
+        yPrev=y; } if(c<2) bx('sowood',cx+cw/2,8,0,2.2,H-12,d-3); }
+  } else if(icon==='songstand'){   // 花几：圆面三足 + 青瓷花瓶 + 枝叶
+    bx('sowood',0,H-3,0,w,3,w); cy('sowood',0,H-3,0,w,3,w);
+    [0,1,2].forEach(i=>{ const a=i*Math.PI*2/3+.5; cy('sowood',Math.cos(a)*w*.3,0,Math.sin(a)*w*.3,3.4,H-3,3.4); });
+    cy('sowood',0,22,0,w*.7,2,w*.7); cy('celadon',0,H,0,9,18,9); sp('celadon',0,H+12,0,13,13,13); sp('leafy',0,H+28,0,24,24,24);
   } else if(def.legs || icon==='table'){
     const lw=Math.min(5,w*.08);
     bx('wood',0,H-4,0,w,4,d);                                                              // 台面
@@ -5067,7 +5133,7 @@ function mainBbox(){   // 主体建筑占地：所有楼层外墙（没有外墙
 }
 function build3D(maxFloor, opts){
   opts = opts || {}; // 镜头渲染用：{roof:{...}覆盖屋顶设置, ceiling:true 补天花板（室内镜头）, people:false 隐藏参照人物}
-  const g = new T.Group();
+  const g = new T.Group(), SONG = project.style==='song';   // 宋式预设：暖石灰白墙、青灰瓦、素木、柔光
   const box = new T.BoxGeometry(1,1,1), cylGeo = new T.CylinderGeometry(.5,.5,1,24), sphGeo = new T.SphereGeometry(.5,24,16), planeGeo = new T.PlaneGeometry(1,1);
   const std = (c,o)=> new T.MeshStandardMaterial({color:c, roughness:.8, envMapIntensity:.45, ...(o||{})});
   const phys = (c,o)=> new T.MeshPhysicalMaterial({color:c, roughness:.8, envMapIntensity:.45, ...(o||{})});
@@ -5075,17 +5141,17 @@ function build3D(maxFloor, opts){
   const groundMap = gground.map.clone(); groundMap.needsUpdate = true; groundMap.repeat.set(1500/9,1500/9); groundMap.anisotropy = maxAniso();
   // 窄色板：白墙 / 橡木 / 胡桃 / 炭灰 / 焦糖 / 燕麦 / 黄铜 —— 所有家具和软装只从这几种颜色里取
   const M = {
-    ext: std('#fbf8f1',{map:pl.map, bumpMap:pl.bump, bumpScale:.35, roughness:.92}),
-    int: std('#fcf9f3',{map:pl.map, bumpMap:pl.bump, bumpScale:.35, roughness:.92}),
+    ext: std(SONG?'#f1e9d7':'#fbf8f1',{map:pl.map, bumpMap:pl.bump, bumpScale:.35, roughness:.92}),
+    int: std(SONG?'#f3ecdc':'#fcf9f3',{map:pl.map, bumpMap:pl.bump, bumpScale:.35, roughness:.92}),
     fence: std('#8c6a48',{roughness:.7}), slab: std('#ffffff',{map:slabSet.map, bumpMap:slabSet.bump, bumpScale:.3, roughness:.82, envMapIntensity:.3}), ceil: std('#f8f4ec',{roughness:.95, envMapIntensity:.3}),
-    roof: std('#7b7d80',{roughness:.8}), nb: std('#d9d5cc',{roughness:.9}), col: std('#b9b5ab',{roughness:.85}),
-    tile: std('#ffffff',{map:rf.map, bumpMap:rf.bump, bumpScale:.8, roughness:.7, side:T.DoubleSide, envMapIntensity:.5}),
+    roof: std(SONG?'#6f7b7a':'#7b7d80',{roughness:.8}), paperWin: std('#efe6cf',{transparent:true, opacity:.62, roughness:.9, depthWrite:false, envMapIntensity:.2}), nb: std('#d9d5cc',{roughness:.9}), col: std('#b9b5ab',{roughness:.85}),
+    tile: std(SONG?'#b4c4c6':'#ffffff',{map:rf.map, bumpMap:rf.bump, bumpScale:.8, roughness:.7, side:T.DoubleSide, envMapIntensity:.5}),
     pitWall: std('#cfc8b8',{roughness:.85}), trunk: std('#6e5440',{roughness:.95}), struct: std('#b8946a',{roughness:.7}),
     glass: phys('#a8cddd',{transparent:true, opacity:.22, roughness:.04, metalness:0, envMapIntensity:1.6, depthWrite:false}),
     leafA: std('#68a357',{roughness:.85}), leafB: std('#7bb565',{roughness:.85}), leafC: std('#58954b',{roughness:.85}), conifer: std('#3c7a45',{roughness:.85}),
     ground: std('#ffffff',{map:groundMap, roughness:1, envMapIntensity:.15})
   };
-  const grainW = grainTex('#76503a'), grainO = grainTex('#cdb08a');
+  const grainW = grainTex(SONG?'#9a7c58':'#76503a'), grainO = grainTex(SONG?'#d9c8a4':'#cdb08a'), grainS = grainTex('#b79d73');
   const FM = {
     wood: phys('#ffffff',{map:grainW, roughness:.5, envMapIntensity:.6, clearcoat:.15, clearcoatRoughness:.5}),     // 胡桃（桌椅、床架、书架）
     cab: std('#ffffff',{map:grainO, roughness:.55, envMapIntensity:.5}),                                           // 浅橡木（柜体）
@@ -5106,7 +5172,8 @@ function build3D(maxFloor, opts){
     carbody: phys('#aeb6bf',{roughness:.28, metalness:.6, clearcoat:.7, clearcoatRoughness:.15, envMapIntensity:1.1}),
     cglass: std('#1d2a36',{roughness:.12, metalness:.2, envMapIntensity:1.3}), tire: std('#1f2023',{roughness:.9}),
     lamp: new T.MeshBasicMaterial({color:'#fff2c4'}), tail: std('#b03a2e',{roughness:.4}),
-    glassM: M.glass, frame: std('#24282c',{roughness:.4, metalness:.7, envMapIntensity:.8}), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
+    glassM: M.glass, frame: SONG ? std('#3a2d24',{roughness:.6, metalness:.05, envMapIntensity:.4}) : std('#24282c',{roughness:.4, metalness:.7, envMapIntensity:.8}),
+    sowood: phys('#ffffff',{map:grainS, roughness:.6, envMapIntensity:.4}), paper: std('#f1e8d2',{roughness:.95, emissive:'#f1e8d2', emissiveIntensity:.12, envMapIntensity:.3}), celadon: std('#a9c4b2',{roughness:.28, envMapIntensity:.9}), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
   };
   const _fm = {}; const fenceMat = k => _fm[k] || (_fm[k] = (k==='black'||k==='bronze') ? std(FENCE_COLORS[k].hex,{roughness:.4, metalness:.65, envMapIntensity:.9}) : std(FENCE_COLORS[k].hex,{roughness:.72, envMapIntensity:.4}));
   const _sm = {};
@@ -5169,7 +5236,7 @@ function build3D(maxFloor, opts){
       const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.BufferAttribute(pos,3)); geo.setAttribute('uv',new T.BufferAttribute(uv,2)); geo.setIndex([0,2,1,1,2,3]); geo.computeVertexNormals();
       const m=new T.Mesh(geo,mats.tile); m.castShadow=m.receiveShadow=true; parent.add(m);
       m.userData.roofSample=(X,Z)=> (X*100<X0||X*100>X1||Z*100<Z0||Z*100>Z1) ? null : (yb+3+hAt(X*100,Z*100))/100;
-    } else buildSlopeRoof(parent, [{x:x1,y:y1,w:x2-x1,h:y2-y1}], (yb+3)/100, {style:st, pitch:rf.pitch||30, eave:e, ridge:rf.ridge||'auto'}, mats.tile);
+    } else buildSlopeRoof(parent, [{x:x1,y:y1,w:x2-x1,h:y2-y1}], (yb+3)/100, {style:st, pitch:rf.pitch||30, eave:e, ridge:rf.ridge||'auto', curve:rf.curve||0}, mats.tile);
   };
   const y0 = []; let acc = 0;
   project.floors.forEach((f,i)=>{ y0[i] = acc; acc += f.heightCm||300; });
@@ -5251,7 +5318,7 @@ function build3D(maxFloor, opts){
       const ops = f.openings.filter(o=>o.wallId===wl.id).map(o=>{
         const d = openingDims(o), c=o.t*len;
         const wst = windowStyle(o), hole = wst && WINDOW_STYLES[wst].hole;
-        return { id:o.id, a:Math.max(0,c-o.width/2), b:Math.min(len,c+o.width/2), sill:d.sill, top:Math.min(h,d.sill+d.h), win:o.kind==='window' && !hole, shape: hole ? wst : null, kind:o.kind, wst };
+        return { dst: o.kind==='door' ? o.style : null, id:o.id, a:Math.max(0,c-o.width/2), b:Math.min(len,c+o.width/2), sill:d.sill, top:Math.min(h,d.sill+d.h), win:o.kind==='window' && !hole, shape: hole ? wst : null, kind:o.kind, wst };
       }).sort((p,q)=>p.a-q.a);
       let c0 = 0;
       ops.forEach(o=>{
@@ -5273,13 +5340,32 @@ function build3D(maxFloor, opts){
           const sc=(o.a+o.b)/2, ww=o.b-o.a, hh=o.top-o.sill, fw=3.5, fd=Math.max(6,t*.55);
           const fr=(sp,yc,sl,sy)=> addR(FM.frame, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, fd, ry, cur, .4);
           fr(sc,o.top-fw/2,ww,fw); fr(sc,o.sill+fw/2,ww,fw); fr(o.a+fw/2,o.sill+hh/2,fw,hh); fr(o.b-fw/2,o.sill+hh/2,fw,hh);
-          fr(sc,o.sill+hh/2,o.wst==='casement'?3:5,hh-2*fw);
-          add(M.glass, wl.x1+ux*sc, base+(o.sill+o.top)/2, wl.y1+uz*sc, ww-2*fw+1, hh-2*fw+1, 1.2, ry).castShadow = false;
+          if(o.wst==='zhiling' || o.wst==='gezi'){   // 直棂窗：只有竖向细棂、不装玻璃；格子窗：方格棂条 + 一层宣纸
+            const lz = o.wst==='zhiling', iw = ww-2*fw, ih = hh-2*fw, nI = Math.max(2,Math.round(iw/(lz?14:20))), bw = lz?3.2:2.2;
+            for(let k=0;k<nI;k++) fr(o.a+fw+iw*(k+.5)/nI, o.sill+hh/2, bw, ih);
+            if(!lz){ const nJ = Math.max(2,Math.round(ih/20)); for(let j=1;j<nJ;j++) fr(sc, o.sill+fw+ih*j/nJ, iw, 2.2); add(M.paperWin, wl.x1+ux*sc, base+(o.sill+o.top)/2, wl.y1+uz*sc, iw, ih, .8, ry).castShadow = false; }
+          } else {
+            fr(sc,o.sill+hh/2,o.wst==='casement'?3:5,hh-2*fw);
+            add(M.glass, wl.x1+ux*sc, base+(o.sill+o.top)/2, wl.y1+uz*sc, ww-2*fw+1, hh-2*fw+1, 1.2, ry).castShadow = false;
+          }
           addR(FM.stone, wl.x1+ux*sc, base+o.sill-1.6, wl.y1+uz*sc, ww+8, 3.2, t+7, ry, cur, .4);
         }
         if(o.kind==='door'){   // 门套：两侧立框 + 门头，比直接一个洞更像"做过收口"
           const jw=3.2, dep=t+1.4, jb=(sp,yc,sl,sy)=> addR(FM.trim, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, dep, ry, cur, .3);
           jb(o.a+jw/2,o.top/2,jw,o.top); jb(o.b-jw/2,o.top/2,jw,o.top); jb((o.a+o.b)/2,o.top-jw/2,o.b-o.a,jw);
+          if(o.dst==='gezi'){   // 格子门（宋式）：每扇下部实心裙板，上部竖向+横向棂条，后衬宣纸
+            const ww2 = o.b-o.a, nl = ww2>=160 ? 4 : 2, lw2 = ww2/nl, dm = (m,sp,yc,sl,sy,sd)=>{ const q = addR(m, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, sd, ry, cur, .3); q.userData.solid = false; return q; };
+            const skirt = 40, topY = o.top-jw, lat0 = skirt+4, lat1 = topY-4;
+            for(let l=0;l<nl;l++){ const a0 = o.a+lw2*l, c0 = a0+lw2/2;
+              dm(FM.wood, a0+1.6, o.top/2, 3.2, o.top-jw, 3);                       // 边梃
+              dm(FM.wood, c0, skirt/2, lw2-5, skirt-2, 2.8);                         // 裙板
+              dm(FM.wood, c0, skirt, lw2, 3.2, 3); dm(FM.wood, c0, topY-1.6, lw2, 3.2, 3);   // 下/上抹头
+              const nv = Math.max(3,Math.round(lw2/10)); for(let k=0;k<nv;k++) dm(FM.wood, a0+lw2*(k+.5)/nv, (lat0+lat1)/2, 2, lat1-lat0, 2.2);
+              const nh = Math.max(2,Math.round((lat1-lat0)/28)); for(let k=1;k<nh;k++) dm(FM.wood, c0, lat0+(lat1-lat0)*k/nh, lw2-4, 2, 2.2);
+            }
+            dm(FM.wood, o.b-1.6, o.top/2, 3.2, o.top-jw, 3);
+            const q = add(M.paperWin, wl.x1+ux*(o.a+o.b)/2, base+(lat0+lat1)/2, wl.y1+uz*(o.a+o.b)/2, ww2-6, lat1-lat0, .8, ry); q.castShadow = false; q.userData.solid = false;
+          }
         }
         c0 = Math.max(c0,o.b);
       });
@@ -5707,6 +5793,7 @@ function applySun(){
   const {cx,cz,size,totalH} = three.fit, R = size*2+totalH, sun = three.sun;
   sun.position.set(cx+Math.sin(az)*Math.cos(el)*R, Math.sin(el)*R, cz-Math.cos(az)*Math.cos(el)*R);
   sun.target.position.set(cx,0,cz);
+  { const song = project.style==='song'; sun.intensity = song ? 1.6 : 2.3; three.hemi.intensity = song ? .8 : .55; three.hemi.color.setHex(song ? 0xfff3e0 : 0xfff6ea); }   // 宋式：柔光，对比低
   const s = size*(nbCfg() && Object.values(nbCfg().c).some(v=>v&&v[0]>0) ? 2.3 : .9)+5;   // 有邻居时阴影范围要放大到九宫格
   Object.assign(sun.shadow.camera, {left:-s, right:s, top:s, bottom:-s, near:.1, far:R*2+size*2+20});
   sun.shadow.camera.updateProjectionMatrix(); draw3D();
@@ -5773,6 +5860,7 @@ btn3D.onclick = async ()=>{
 function syncView3D(){
   if(!three || view3d.hidden) return;
   document.getElementById('v3NbShow').checked = nbCfg().show;
+  document.getElementById('v3Style').value = project.style==='song' ? 'song' : 'modern';
   const sel = document.getElementById('v3Floor');
   sel.innerHTML = project.floors.map((f,i)=>`<option value="${i}">${esc(f.name)}</option>`).join('');
   sel.value = v3Pin ?? project.currentFloor;
@@ -5791,6 +5879,7 @@ function renderNbPanel(){
 document.getElementById('v3Nb').addEventListener('click', renderNbPanel);
 document.getElementById('v3NbShow').onchange = (e)=>{ pushHistory(); project.neighbors = project.neighbors || {alley:100, c:{}}; project.neighbors.show = e.target.checked; syncView3D(); };
 document.getElementById('v3Alley').onchange = (e)=>{ pushHistory(); project.neighbors = project.neighbors || {alley:100, c:{}}; project.neighbors.alley = Math.max(0, +e.target.value||0); syncView3D(); };
+document.getElementById('v3Style').onchange = (e)=>{ pushHistory(); project.style = e.target.value; syncView3D(); if(typeof updateMetrics==='function') updateMetrics(true); };
 document.getElementById('v3Floor').onchange = (e)=>{ switchFloor(+e.target.value); syncView3D(); };
 document.querySelectorAll('#view3dBar [data-view]').forEach(b=> b.onclick = ()=>{ setView(b.dataset.view); document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
 ['v3ViewMore','v3Nb'].forEach(id=>{ const b=document.getElementById(id); b.onclick=(e)=>{ e.stopPropagation(); const w=b.closest('.vpopwrap'), was=w.classList.contains('open'); document.querySelectorAll('.vpopwrap.open').forEach(x=>x.classList.remove('open')); if(!was) w.classList.add('open'); }; });
@@ -6013,14 +6102,15 @@ window.addEventListener('keydown', (e)=>{   // 3D 里按 R 旋转选中的家具
 // 居室窗地比（窗洞面积÷房间面积，门窗归属按墙两侧各取一点落在哪个房间）、楼梯踏步舒适度、粗略造价（建筑面积×可填单价）。
 // 规范类阈值各地不同，这里只放一个参考值（窗地比 1/7，见佛山宅基地自建房技术指南），改下面常量即可。
 var mSig = '', mTimer = 0, mData = null;
-const M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
+const M_FU_MAX = .2, M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
 function computeMetrics(){
   const sv = {state, roomsCache, roomsSig, roomsGridMeta}, warns = [];
   const floors = project.floors.map((f,fi)=>{
     state = f; detectRooms(fi);
-    const gross = computeCoverRects(fi).reduce((s,r)=>s+r.w*r.h,0)/10000, rooms = roomsCache.map(r=>({area:r.areaM2, win:0, name:''}));
+    const gross = computeCoverRects(fi).reduce((s,r)=>s+r.w*r.h,0)/10000, rooms = roomsCache.map(r=>({area:r.areaM2, win:0, name:'', fu:0}));
     f.labels.forEach(l=>{ const i = roomIndexAt(l.x,l.y); if(i>=0 && !rooms[i].name) rooms[i].name = l.text; });
-    let winN = 0, doorN = 0;
+    let winN = 0, doorN = 0, fuA = 0;
+    f.furniture.forEach(fu=>{ const def = FURNITURE_DEFS[fu.kind]||{}; if(def.icon==='car' || furnitureElev(fu)>=100) return; const i = roomIndexAt(fu.x,fu.y); if(i>=0){ rooms[i].fu += fu.w*fu.h/10000; fuA += fu.w*fu.h/10000; } });   // 落地家具占地（不含车、吊柜）
     f.openings.forEach(op=>{
       if(op.kind==='door') doorN++;
       if(op.kind!=='window') return;
@@ -6029,9 +6119,10 @@ function computeMetrics(){
       const dx = wl.x2-wl.x1, dy = wl.y2-wl.y1, L = Math.hypot(dx,dy)||1, x = wl.x1+dx*op.t, y = wl.y1+dy*op.t, off = (wl.thickness||12)/2+20, a = op.width*openingDims(op).h/10000;
       new Set([roomIndexAt(x-dy/L*off, y+dx/L*off), roomIndexAt(x+dy/L*off, y-dx/L*off)]).forEach(i=>{ if(i>=0) rooms[i].win += a; });   // 墙两侧各取一点
     });
+    if(project.style==='song'){ const net = rooms.reduce((a,r)=>a+r.area,0); if(net>0 && fuA/net>M_FU_MAX) warns.push(`${f.name} 家具占地 ${Math.round(fuA/net*100)}%（宋式建议 ≤20%，留白为要）`); rooms.forEach(r=>{ if(r.name && r.area>0 && r.fu/r.area>M_FU_MAX) warns.push(`${f.name} ${r.name}：家具占地 ${Math.round(r.fu/r.area*100)}%（宋式建议 ≤20%）`); }); }
     rooms.forEach(r=>{ if(M_WIN_NEED.test(r.name) && r.win/r.area < M_WIN_MIN) warns.push(`${f.name} ${r.name}：窗地比 ${r.win>0 ? '1/'+(r.area/r.win).toFixed(1) : '无窗'}（建议 ≥1/7）`); });
     let stairWarn = 0; f.stairs.forEach(st=>{ const c = stairComfort(st, f.heightCm||300); if(c.warn.length){ stairWarn++; warns.push(`${f.name} 楼梯：${c.warn[0]}`); } });
-    return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN, colN:(f.columns||[]).length};
+    return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN, fu:fuA, colN:(f.columns||[]).length};
   });
   ({state, roomsCache, roomsSig, roomsGridMeta} = sv);
   return {floors, warns, gross:floors.reduce((s,f)=>s+f.gross,0), net:floors.reduce((s,f)=>s+f.net,0)};
@@ -6043,18 +6134,18 @@ function renderMetrics(){
   document.getElementById('mhHead').textContent = `📊 建面 ${d.gross.toFixed(0)} m²` + (d.warns.length ? `  ⚠ ${d.warns.length}` : '') + (open ? '  ▴' : '  ▾');
   const body = document.getElementById('mhBody'); body.hidden = !open; if(!open) return;
   body.innerHTML = `
-    <table><tr><th>楼层</th><th>建面</th><th>净面积</th><th>房间</th><th>窗/门</th></tr>
-      ${d.floors.map((f,i)=>`<tr data-f="${i}" class="${i===project.currentFloor?'cur':''}"><td>${esc(f.name)}</td><td>${f.gross.toFixed(1)}</td><td>${f.net.toFixed(1)}</td><td>${f.rooms.length}</td><td>${f.winN}/${f.doorN}</td></tr>`).join('')}
-      <tr class="sum"><td>合计</td><td>${d.gross.toFixed(1)}</td><td>${d.net.toFixed(1)}</td><td>${d.floors.reduce((s,f)=>s+f.rooms.length,0)}</td><td>${d.floors.reduce((s,f)=>s+f.winN,0)}/${d.floors.reduce((s,f)=>s+f.doorN,0)}</td></tr></table>
+    <table><tr><th>楼层</th><th>建面</th><th>净面积</th><th>房间</th><th>窗/门</th><th title="落地家具占地÷净面积；宋式建议≤20%">家具占地</th></tr>
+      ${d.floors.map((f,i)=>`<tr data-f="${i}" class="${i===project.currentFloor?'cur':''}"><td>${esc(f.name)}</td><td>${f.gross.toFixed(1)}</td><td>${f.net.toFixed(1)}</td><td>${f.rooms.length}</td><td>${f.winN}/${f.doorN}</td><td>${f.net>0?Math.round(f.fu/f.net*100)+'%':'-'}</td></tr>`).join('')}
+      <tr class="sum"><td>合计</td><td>${d.gross.toFixed(1)}</td><td>${d.net.toFixed(1)}</td><td>${d.floors.reduce((s,f)=>s+f.rooms.length,0)}</td><td>${d.floors.reduce((s,f)=>s+f.winN,0)}/${d.floors.reduce((s,f)=>s+f.doorN,0)}</td><td>${d.net>0?Math.round(d.floors.reduce((s,f)=>s+f.fu,0)/d.net*100)+'%':'-'}</td></tr></table>
     <div class="mhrow">框架柱 <b>${d.floors.reduce((s,f)=>s+f.colN,0)}</b> 根${d.floors.map(f=>f.colN?` · ${esc(f.name)} ${f.colN}`:'').join('')}</div>
     <div class="mhrow">造价估算 <input type="number" id="mhUnit" min="0" step="100" value="${project.unitCost||''}" placeholder="单价"> 元/m²　${cost ? '≈ <b>'+(cost/10000).toFixed(1)+'</b> 万元' : '<span style="opacity:.6">填单价后显示</span>'}</div>
-    ${cur && cur.rooms.some(r=>r.name) ? `<div class="mhsub">${esc(cur.name)} 房间窗地比</div><table>${cur.rooms.filter(r=>r.name).map(r=>`<tr class="${M_WIN_NEED.test(r.name) && r.win/r.area<M_WIN_MIN?'bad':''}"><td>${esc(r.name)}</td><td>${r.area.toFixed(1)} m²</td><td>${r.win>0?'1/'+(r.area/r.win).toFixed(1):'无窗'}</td></tr>`).join('')}</table>` : ''}
+    ${cur && cur.rooms.some(r=>r.name) ? `<div class="mhsub">${esc(cur.name)} 房间 面积 / 窗地比 / 家具占地</div><table>${cur.rooms.filter(r=>r.name).map(r=>`<tr class="${M_WIN_NEED.test(r.name) && r.win/r.area<M_WIN_MIN?'bad':''}"><td>${esc(r.name)}</td><td>${r.area.toFixed(1)} m²</td><td>${r.win>0?'1/'+(r.area/r.win).toFixed(1):'无窗'}</td><td>${Math.round(r.fu/r.area*100)}%</td></tr>`).join('')}</table>` : ''}
     ${d.warns.length ? `<div class="mhsub">提示</div>${d.warns.map(w=>`<div class="mhw">⚠ ${esc(w)}</div>`).join('')}` : '<div class="mhsub" style="color:#15803d">✓ 暂无提示</div>'}`;
   body.querySelectorAll('tr[data-f]').forEach(tr=> tr.onclick = ()=> switchFloor(+tr.dataset.f));
   document.getElementById('mhUnit').onchange = (e)=>{ pushHistory(); project.unitCost = Math.max(0, +e.target.value||0); renderMetrics(); };
 }
 function updateMetrics(force){
-  const sig = JSON.stringify([project.floors.map(f=>[f.name,f.heightCm,f.walls,f.openings,f.labels,f.stairs,f.columns,f.areas.filter(a=>a.kind==='open')]), project.currentFloor]);
+  const sig = JSON.stringify([project.style, project.floors.map(f=>[f.name,f.heightCm,f.walls,f.openings,f.labels,f.stairs,f.columns,f.furniture.map(u=>[u.kind,u.x,u.y,u.w,u.h,u.elev]),f.areas.filter(a=>a.kind==='open')]), project.currentFloor]);
   if(force || sig!==mSig || !mData){ mSig = sig; mData = computeMetrics(); }
   renderMetrics();
 }
