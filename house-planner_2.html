@@ -158,6 +158,12 @@
   .furniture-picker button.fitem .fdim{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap;}
   #view3d{position:absolute;inset:0;z-index:50;background:#dfe9f3;}
   #view3dBar{position:absolute;top:8px;left:8px;z-index:2;display:flex;flex-wrap:nowrap;align-items:center;max-width:calc(100% - 16px);gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);}
+  #tidyCard{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:61;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.22);padding:10px 14px;font-size:12px;color:var(--text);width:340px;max-width:90%;} #tidyCard .tcrow{margin:8px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;} #tidyCard .tclist{margin:8px 0;line-height:1.8;} #tidyCard .tdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
+  #metricsHud{position:absolute;right:12px;bottom:12px;z-index:60;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);font-size:12px;color:var(--text);max-width:340px;}
+  #mhHead{display:block;width:100%;padding:7px 12px;border:none;background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:left;border-radius:10px;white-space:nowrap;}
+  #mhBody{padding:2px 12px 10px;max-height:60vh;overflow-y:auto;} #mhBody table{width:100%;border-collapse:collapse;margin:4px 0;} #mhBody th{font-weight:500;color:var(--muted);text-align:right;padding:2px 4px;} #mhBody th:first-child,#mhBody td:first-child{text-align:left;}
+  #mhBody td{padding:2px 4px;text-align:right;} #mhBody tr[data-f]{cursor:pointer;} #mhBody tr.cur td{color:var(--accent);font-weight:600;} #mhBody tr.sum td{border-top:1px solid var(--border);font-weight:600;} #mhBody tr.bad td{color:#b45309;font-weight:600;}
+  #mhBody .mhrow{margin:6px 0;} #mhBody .mhrow input{width:64px;padding:2px 4px;} #mhBody .mhsub{margin-top:8px;color:var(--muted);} #mhBody .mhw{color:#b45309;margin:2px 0;}
   #editHint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:2;background:rgba(20,24,30,.66);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;max-width:62%;text-align:center;line-height:1.5;pointer-events:none;}
   #view3dBar select{padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:12px;}
   #view3d.drone-on:not(.drone-bar) #view3dBar{display:none;}
@@ -271,6 +277,7 @@
         <button id="btnPaste" class="mi"><span class="ml">粘贴</span><span class="mk">⌘V</span></button>
         <button id="btnDelete" class="mi"><span class="ml">删除选中</span><span class="mk">Del</span></button>
         <div class="msep"></div>
+        <button id="btnTidy" class="mi"><span class="ml">整理墙体…</span><span class="mk">对齐接缝</span></button>
         <button id="btnClear" class="mi danger"><span class="ml">清空当前楼层…</span></button>
       </div></div>
     <div class="mbtn" data-menu="view"><button class="mtitle">视图</button>
@@ -342,6 +349,8 @@
   </div>
   <main>
     <div id="canvasWrap">
+      <div id="tidyCard" hidden></div>
+      <div id="metricsHud"><button id="mhHead" title="实时指标：面积、窗地比、楼梯舒适度、造价估算"></button><div id="mhBody" hidden></div></div>
       <canvas id="gridCanvas"></canvas>
       <canvas id="mainCanvas"></canvas>
       <div id="view3d" hidden>
@@ -804,7 +813,7 @@ function roomIndexAt(wx, wy){
 // 3D 视图开着时，2D 数据一变（拖动/面板/撤销…）就同步 3D；这里只检查 3D 开没开，真正的逻辑在 sync3DFromData
 function hook3D(){ const v=document.getElementById('view3d'); if(v && !v.hidden) sync3DFromData(); }
 function render(){
-  hook3D();
+  hook3D(); scheduleMetrics();
   const w = mainCanvas.width, h = mainCanvas.height;
   // 清屏必须放在 spreadMode 分支之前：铺开视图也会 return，不清屏就会和上一帧编辑视图叠加
   ctx.clearRect(0,0,w,h);
@@ -860,7 +869,7 @@ function render(){
   }
 
   // 对齐参考线：拖动item时全程显示，画在预览/圈选框之下但盖住其它内容之上
-  drawAlignGuides();
+  drawAlignGuides(); drawJunctionMark(); drawTidyMarks();
 
   // drawing preview
   if(drawState.active){
@@ -1995,7 +2004,7 @@ mainCanvas.addEventListener('pointerdown', (e)=>{
   if(spreadMode) return; // 铺开视图是演示模式：除平移外不响应任何编辑操作
 
   if(currentTool==='wall-ext' || currentTool==='wall-int' || currentTool==='fence'){
-    const [snx,sny] = snapPoint(wx,wy);
+    const [snx,sny] = snapWall(wx,wy);
     drawState.active = true; drawState.x1=snx; drawState.y1=sny; drawState.x2=snx; drawState.y2=sny;
     drawState.type = currentTool;
     return;
@@ -2290,7 +2299,8 @@ window.addEventListener('pointermove', (e)=>{
   if(drawState.active){
     // 测距允许任意角度（不强制水平/垂直），量斜边、量对角线都用得上；其它线工具照常正交吸附
     const orthoOn = drawState.type==='measure' ? false : !isRectDragTool(drawState.type);
-    const [snx,sny] = snapPoint(wx,wy, drawState.x1, drawState.y1, orthoOn);
+    const isWallDraw = drawState.type==='wall-ext' || drawState.type==='wall-int' || drawState.type==='fence';
+    const [snx,sny] = isWallDraw ? snapWall(wx,wy, drawState.x1, drawState.y1, orthoOn) : snapPoint(wx,wy, drawState.x1, drawState.y1, orthoOn);
     drawState.x2=snx; drawState.y2=sny;
     render();
     updateStatus();
@@ -2353,7 +2363,8 @@ window.addEventListener('pointermove', (e)=>{
         const dx = wx-dragState.start[0], dy = wy-dragState.start[1];
         let nx1 = dragState.orig.x1+dx, ny1 = dragState.orig.y1+dy;
         let nx2 = dragState.orig.x2+dx, ny2 = dragState.orig.y2+dy;
-        const snap = trySnapAlign('wall:'+wl.id, [nx1,nx2], [ny1,ny2]);
+        const js = nearestEndShift(nx1,ny1,nx2,ny2,wl.id);
+        const snap = js ? {dx:js.dx, dy:js.dy} : trySnapAlign('wall:'+wl.id, [nx1,nx2], [ny1,ny2]);
         wl.x1 = nx1+snap.dx; wl.y1 = ny1+snap.dy;
         wl.x2 = nx2+snap.dx; wl.y2 = ny2+snap.dy;
         setEdgeGuides(Math.min(wl.x1,wl.x2), Math.max(wl.x1,wl.x2), Math.min(wl.y1,wl.y2), Math.max(wl.y1,wl.y2));
@@ -2363,8 +2374,10 @@ window.addEventListener('pointermove', (e)=>{
       // 拖动墙的端点（节点）：完全手动，只挪这一面墙自己的端点，不带动其它墙；同样支持对齐吸附
       const wl = state.walls.find(w=>w.id===dragState.id);
       if(wl){
-        const [snx,sny] = snapPoint(wx,wy);
-        const snap = trySnapAlign('wall:'+wl.id, [snx], [sny]);
+        if(dragState.axis===undefined) dragState.axis = Math.min(Math.abs(wl.x2-wl.x1), Math.abs(wl.y2-wl.y1)) <= Math.max(5, .05*Math.hypot(wl.x2-wl.x1,wl.y2-wl.y1));   // 本来是水平/垂直的墙，拖端点时保持正交
+        const oth = dragState.which==='endpoint1' ? [wl.x2,wl.y2] : [wl.x1,wl.y1];
+        const [snx,sny] = snapWall(wx,wy, oth[0], oth[1], dragState.axis, wl.id);
+        const snap = junctionMark ? {dx:0,dy:0} : trySnapAlign('wall:'+wl.id, [snx], [sny]);
         const fx = snx+snap.dx, fy = sny+snap.dy;
         if(dragState.which==='endpoint1'){ wl.x1=fx; wl.y1=fy; } else { wl.x2=fx; wl.y2=fy; }
         setEdgeGuides(Math.min(wl.x1,wl.x2), Math.max(wl.x1,wl.x2), Math.min(wl.y1,wl.y2), Math.max(wl.y1,wl.y2));
@@ -2527,7 +2540,7 @@ window.addEventListener('pointerup', ()=>{
     marqueeState = null;
     render(); showPanel();
   }
-  dragState=null;
+  dragState=null; junctionMark=null;
   if(activeGuides){ activeGuides=null; render(); }
 });
 
@@ -3103,6 +3116,7 @@ function switchFloor(idx){
   syncStateRef();
   selection = null; multiSelection=[];
   render(); showPanel(); renderFloorTabs();
+  if(tidyPrev) tidyRefresh();
 }
 
 function renameFloor(idx){
@@ -3722,7 +3736,7 @@ function showPanel(){
 // 兼容旧版本（单层，无 floors 结构）的存档/导入数据
 function normalizeProject(data){
   if(data && Array.isArray(data.floors)){
-    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors };
+    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors, unitCost: data.unitCost };
   }
   if(data && Array.isArray(data.walls)){
     return { floors:[ensureFloorShape({id:0, name:'1层', walls:data.walls||[], openings:data.openings||[], labels:data.labels||[]})], currentFloor:0, nextId:data.nextId||1 };
@@ -5927,6 +5941,247 @@ window.addEventListener('keydown', (e)=>{   // 3D 里按 R 旋转选中的家具
   if(!it || !['furniture','stair','person'].includes(selection.type)) return;
   pushHistory(); it.rot = (((it.rot||0) + (e.shiftKey?15:90)) % 360 + 360) % 360; render(); showPanel();
 });
+// ---- 实时指标面板（右下角）----
+// 每次数据变动后（防抖 200ms、数据真变了才重算）统计：各层建筑面积（含墙，楼板范围）/净面积（房间）、房间/门窗数、
+// 居室窗地比（窗洞面积÷房间面积，门窗归属按墙两侧各取一点落在哪个房间）、楼梯踏步舒适度、粗略造价（建筑面积×可填单价）。
+// 规范类阈值各地不同，这里只放一个参考值（窗地比 1/7，见佛山宅基地自建房技术指南），改下面常量即可。
+var mSig = '', mTimer = 0, mData = null;
+const M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
+function computeMetrics(){
+  const sv = {state, roomsCache, roomsSig, roomsGridMeta}, warns = [];
+  const floors = project.floors.map((f,fi)=>{
+    state = f; detectRooms(fi);
+    const gross = computeCoverRects(fi).reduce((s,r)=>s+r.w*r.h,0)/10000, rooms = roomsCache.map(r=>({area:r.areaM2, win:0, name:''}));
+    f.labels.forEach(l=>{ const i = roomIndexAt(l.x,l.y); if(i>=0 && !rooms[i].name) rooms[i].name = l.text; });
+    let winN = 0, doorN = 0;
+    f.openings.forEach(op=>{
+      if(op.kind==='door') doorN++;
+      if(op.kind!=='window') return;
+      winN++;
+      const wl = f.walls.find(w=>w.id===op.wallId); if(!wl) return;
+      const dx = wl.x2-wl.x1, dy = wl.y2-wl.y1, L = Math.hypot(dx,dy)||1, x = wl.x1+dx*op.t, y = wl.y1+dy*op.t, off = (wl.thickness||12)/2+20, a = op.width*openingDims(op).h/10000;
+      new Set([roomIndexAt(x-dy/L*off, y+dx/L*off), roomIndexAt(x+dy/L*off, y-dx/L*off)]).forEach(i=>{ if(i>=0) rooms[i].win += a; });   // 墙两侧各取一点
+    });
+    rooms.forEach(r=>{ if(M_WIN_NEED.test(r.name) && r.win/r.area < M_WIN_MIN) warns.push(`${f.name} ${r.name}：窗地比 ${r.win>0 ? '1/'+(r.area/r.win).toFixed(1) : '无窗'}（建议 ≥1/7）`); });
+    let stairWarn = 0; f.stairs.forEach(st=>{ const c = stairComfort(st, f.heightCm||300); if(c.warn.length){ stairWarn++; warns.push(`${f.name} 楼梯：${c.warn[0]}`); } });
+    return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN};
+  });
+  ({state, roomsCache, roomsSig, roomsGridMeta} = sv);
+  return {floors, warns, gross:floors.reduce((s,f)=>s+f.gross,0), net:floors.reduce((s,f)=>s+f.net,0)};
+}
+function renderMetrics(){
+  const hud = document.getElementById('metricsHud'); if(!hud || !mData) return;
+  let open = false; try{ open = localStorage.getItem('hp.metricsOpen')==='1'; }catch(_){}
+  const d = mData, cost = project.unitCost>0 ? d.gross*project.unitCost : 0, cur = d.floors[project.currentFloor];
+  document.getElementById('mhHead').textContent = `📊 建面 ${d.gross.toFixed(0)} m²` + (d.warns.length ? `  ⚠ ${d.warns.length}` : '') + (open ? '  ▴' : '  ▾');
+  const body = document.getElementById('mhBody'); body.hidden = !open; if(!open) return;
+  body.innerHTML = `
+    <table><tr><th>楼层</th><th>建面</th><th>净面积</th><th>房间</th><th>窗/门</th></tr>
+      ${d.floors.map((f,i)=>`<tr data-f="${i}" class="${i===project.currentFloor?'cur':''}"><td>${esc(f.name)}</td><td>${f.gross.toFixed(1)}</td><td>${f.net.toFixed(1)}</td><td>${f.rooms.length}</td><td>${f.winN}/${f.doorN}</td></tr>`).join('')}
+      <tr class="sum"><td>合计</td><td>${d.gross.toFixed(1)}</td><td>${d.net.toFixed(1)}</td><td>${d.floors.reduce((s,f)=>s+f.rooms.length,0)}</td><td>${d.floors.reduce((s,f)=>s+f.winN,0)}/${d.floors.reduce((s,f)=>s+f.doorN,0)}</td></tr></table>
+    <div class="mhrow">造价估算 <input type="number" id="mhUnit" min="0" step="100" value="${project.unitCost||''}" placeholder="单价"> 元/m²　${cost ? '≈ <b>'+(cost/10000).toFixed(1)+'</b> 万元' : '<span style="opacity:.6">填单价后显示</span>'}</div>
+    ${cur && cur.rooms.some(r=>r.name) ? `<div class="mhsub">${esc(cur.name)} 房间窗地比</div><table>${cur.rooms.filter(r=>r.name).map(r=>`<tr class="${M_WIN_NEED.test(r.name) && r.win/r.area<M_WIN_MIN?'bad':''}"><td>${esc(r.name)}</td><td>${r.area.toFixed(1)} m²</td><td>${r.win>0?'1/'+(r.area/r.win).toFixed(1):'无窗'}</td></tr>`).join('')}</table>` : ''}
+    ${d.warns.length ? `<div class="mhsub">提示</div>${d.warns.map(w=>`<div class="mhw">⚠ ${esc(w)}</div>`).join('')}` : '<div class="mhsub" style="color:#15803d">✓ 暂无提示</div>'}`;
+  body.querySelectorAll('tr[data-f]').forEach(tr=> tr.onclick = ()=> switchFloor(+tr.dataset.f));
+  document.getElementById('mhUnit').onchange = (e)=>{ pushHistory(); project.unitCost = Math.max(0, +e.target.value||0); renderMetrics(); };
+}
+function updateMetrics(force){
+  const sig = JSON.stringify([project.floors.map(f=>[f.name,f.heightCm,f.walls,f.openings,f.labels,f.stairs,f.areas.filter(a=>a.kind==='open')]), project.currentFloor]);
+  if(force || sig!==mSig || !mData){ mSig = sig; mData = computeMetrics(); }
+  renderMetrics();
+}
+function scheduleMetrics(){ clearTimeout(mTimer); mTimer = setTimeout(()=>updateMetrics(false), 200); }
+document.getElementById('mhHead').onclick = ()=>{ let o = false; try{ o = localStorage.getItem('hp.metricsOpen')==='1'; localStorage.setItem('hp.metricsOpen', o?'0':'1'); }catch(_){} renderMetrics(); };
+
+// ---- 精度：接点吸附（预防）+ 整理墙体（修复）----
+// 预防：画墙/拖端点/拖墙身时，优先吸附【已有墙的端点】，其次【墙中线】（含下一层的墙，上下层自动对齐），最后才是网格。
+// 修复：「编辑 → 整理墙体…」对已有数据做 拉直 → 合并重叠 → 合并近点 → T 接头补齐 → 对齐下层 → 取整，先预览再应用。
+var junctionMark = null;   // {x,y,kind} 当前命中的接点，render 里画个圈
+const JT_TOL = 15;         // cm：吸附/整理的默认容差
+function junctionTargets(excludeId){
+  const t = [], add = (ws,lower)=> ws.forEach(w=>{ if(w.type!=='fence' && !(w.id===excludeId && !lower)) t.push({w, lower}); });
+  add(state.walls,false); if(project.currentFloor>0) add(project.floors[project.currentFloor-1].walls,true);
+  return t;
+}
+// 画墙/拖端点用的吸附：有参考点且开着正交时，点被锁在过参考点的水平/垂直线上，沿这条线吸附到【墙端点的坐标】或【与别的墙中线的交点】
+function snapWall(x,y,refX,refY,ortho,excludeId){
+  const tol = Math.min(JT_TOL, 14/view.scale), T = junctionTargets(excludeId), G = GRID_MINOR;
+  junctionMark = null;
+  const lock = refX!==undefined && ortho!==false && snapOrtho;
+  const cands = [];   // {x,y,d,kind}
+  const consider = (cx,cy,d,kind,lower)=>{ if(d<=tol) cands.push({x:cx, y:cy, d:d-(kind==='end'?3:0)+(lower?1:0), kind}); };
+  if(lock){
+    const horiz = Math.abs(Math.round(x/G)*G-refX) >= Math.abs(Math.round(y/G)*G-refY);
+    T.forEach(({w,lower})=>{
+      [[w.x1,w.y1],[w.x2,w.y2]].forEach(([ex,ey])=>{
+        if(horiz ? Math.abs(ey-refY)<=tol : Math.abs(ex-refX)<=tol) consider(horiz?ex:refX, horiz?refY:ey, Math.abs(horiz ? ex-x : ey-y), 'end', lower);
+      });
+      const dx = w.x2-w.x1, dy = w.y2-w.y1;
+      if(horiz ? Math.abs(dy)>1e-6 : Math.abs(dx)>1e-6){   // 与锁定线不平行：求交点
+        const t = horiz ? (refY-w.y1)/dy : (refX-w.x1)/dx, L = Math.hypot(dx,dy) || 1;
+        if(t>=-tol/L && t<=1+tol/L){ const ix = w.x1+dx*t, iy = w.y1+dy*t; consider(horiz?ix:refX, horiz?refY:iy, Math.abs(horiz ? ix-x : iy-y), 'line', lower); }
+      }
+    });
+    const best = cands.sort((a,b)=>a.d-b.d)[0];
+    if(best){ junctionMark = {x:best.x, y:best.y, kind:best.kind}; return [best.x, best.y]; }
+    return horiz ? [Math.round(x/G)*G, refY] : [refX, Math.round(y/G)*G];
+  }
+  T.forEach(({w,lower})=>{
+    [[w.x1,w.y1],[w.x2,w.y2]].forEach(([ex,ey])=> consider(ex,ey,Math.hypot(ex-x,ey-y),'end',lower));
+    const dx = w.x2-w.x1, dy = w.y2-w.y1, l2 = dx*dx+dy*dy; if(!l2) return;
+    const t = Math.max(0,Math.min(1,((x-w.x1)*dx+(y-w.y1)*dy)/l2)), px = w.x1+dx*t, py = w.y1+dy*t;
+    consider(px,py,Math.hypot(px-x,py-y),'line',lower);
+  });
+  const best = cands.sort((a,b)=>a.d-b.d)[0];
+  if(best){ junctionMark = {x:best.x, y:best.y, kind:best.kind}; return [best.x, best.y]; }
+  return [Math.round(x/G)*G, Math.round(y/G)*G];
+}
+function drawJunctionMark(){
+  if(!junctionMark || !(drawState.active || (dragState && (dragState.type==='wall-endpoint'||dragState.type==='wall-body')))) return;
+  const [sx,sy] = worldToScreen(junctionMark.x, junctionMark.y);
+  ctx.save(); ctx.strokeStyle = junctionMark.kind==='end' ? '#e11d48' : '#2563eb'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(sx,sy,junctionMark.kind==='end'?8:6,0,Math.PI*2); ctx.stroke();
+  if(junctionMark.kind==='line'){ ctx.beginPath(); ctx.moveTo(sx-9,sy); ctx.lineTo(sx+9,sy); ctx.moveTo(sx,sy-9); ctx.lineTo(sx,sy+9); ctx.stroke(); }
+  ctx.restore();
+}
+
+// ---- 整理墙体：纯函数，不改传入的数据 ----
+// f0：本层；below：下一层（已整理好的，作对齐基准，可为 null）；tol：容差 cm。返回 {floor, marks:[{x,y,kind}], cnt}
+function tidyFloor(f0, below, tol){
+  const f = JSON.parse(JSON.stringify(f0)), W = f.walls, marks = [], cnt = {straighten:0, merge:0, join:0, tjoin:0, align:0, stair:0, left:0};
+  const mk = (x,y,kind)=> marks.push({x,y,kind});
+  const byId = id=> W.find(w=>w.id===id);
+  const openPos = f.openings.map(op=>{ const w = byId(op.wallId); return w ? wallPoint(w, op.t) : null; });   // 门窗的世界坐标：墙怎么动，门窗位置不变
+  const cls = w=> w.type==='fence' ? 'f' : 'w';
+  const ori = w=>{ const dx=w.x2-w.x1, dy=w.y2-w.y1, L=Math.hypot(dx,dy); if(L<1) return 'D'; const lim = Math.min(tol, .052*L);
+    return Math.abs(dy)<=lim && Math.abs(dy)<Math.abs(dx) ? 'H' : Math.abs(dx)<=lim && Math.abs(dx)<Math.abs(dy) ? 'V' : 'D'; };
+  const lc = w=> w._o==='H' ? w.y1 : w.x1;                                   // 线坐标：H 墙的 y、V 墙的 x
+  const setLc = (w,v)=>{ if(w._o==='H'){ w.y1=w.y2=v; } else { w.x1=w.x2=v; } };
+  const lo = w=> w._o==='H' ? Math.min(w.x1,w.x2) : Math.min(w.y1,w.y2), hi = w=> w._o==='H' ? Math.max(w.x1,w.x2) : Math.max(w.y1,w.y2);
+  const propKey = w=> JSON.stringify(Object.assign({}, w, {id:0,x1:0,y1:0,x2:0,y2:0,z:0,_o:0}));
+  // 1 拉直
+  W.forEach(w=>{ w._o = ori(w); if(w._o==='D') return;
+    const a = w._o==='H' ? w.y1 : w.x1, b = w._o==='H' ? w.y2 : w.x2;
+    if(Math.abs(a-b)>.01){ setLc(w,(a+b)/2); cnt.straighten++; mk((w.x1+w.x2)/2,(w.y1+w.y2)/2,'straighten'); } });
+  // 下一层的墙作对齐基准（只取 H/V）
+  const base = below ? below.walls.filter(w=>w.type!=='fence').map(w=>{ const o = Object.assign({}, w); o._o = ori(o); return o; }).filter(w=>w._o!=='D') : [];
+  const anchorOf = w=>{   // 本层 H/V 墙在下一层有同向、线坐标在容差内、范围有重叠的墙 → 返回它的线坐标
+    if(w._o==='D' || cls(w)!=='w') return null; let best = null, bd = 1e9;
+    base.forEach(b=>{ if(b._o!==w._o) return; const d = Math.abs(lc(b)-lc(w)); if(d<=tol && d<bd && Math.min(hi(b),hi(w))-Math.max(lo(b),lo(w)) > -tol){ bd=d; best = lc(b); } });
+    return best; };
+  const prio = w=> (anchorOf(w)!==null ? 1e6 : 0) + Math.hypot(w.x2-w.x1,w.y2-w.y1) + (w.type==='ext' ? 5 : w.type==='int' ? 2 : 0);   // 下层锚点 > 长墙（短墙小段跟长墙走）> 外墙
+  // 2 合并重叠的共线墙（同类型/厚度/高度等全部属性一致才合并，线坐标差在容差内先统一）
+  const seenLeft = new Set();
+  for(let again=true, guard=0; again && guard<200; guard++){ again = false;
+    outer: for(let i=0;i<W.length;i++) for(let j=i+1;j<W.length;j++){
+      const a = W[i], b = W[j];
+      if(a._o==='D' || a._o!==b._o || cls(a)!==cls(b) || Math.abs(lc(a)-lc(b))>tol) continue;
+      if(Math.min(hi(a),hi(b))-Math.max(lo(a),lo(b)) <= 1) continue;
+      if(propKey(a)!==propKey(b)){ const hi_ = prio(a)>=prio(b) ? a : b, lo_ = hi_===a ? b : a; if(Math.abs(lc(lo_)-lc(hi_))>.01){ setLc(lo_, anchorOf(hi_)!==null ? anchorOf(hi_) : lc(hi_)); cnt.align++; mk((lo_.x1+lo_.x2)/2,(lo_.y1+lo_.y2)/2,'align'); }   // 属性不同不合并，但线位置先对齐
+      if(!seenLeft.has(a.id+'-'+b.id)){ seenLeft.add(a.id+'-'+b.id); cnt.left++; mk((a.x1+a.x2+b.x1+b.x2)/4,(a.y1+a.y2+b.y1+b.y2)/4,'left'); } continue; }
+      const win = prio(a)>=prio(b) ? a : b, keep = (hi(a)-lo(a)>=hi(b)-lo(b)) ? a : b, gone = keep===a ? b : a, v = anchorOf(win)!==null ? anchorOf(win) : lc(win);
+      const l = Math.min(lo(a),lo(b)), h = Math.max(hi(a),hi(b));
+      if(keep._o==='H'){ keep.x1=l; keep.x2=h; } else { keep.y1=l; keep.y2=h; }
+      setLc(keep,v);
+      f.openings.forEach(op=>{ if(op.wallId===gone.id) op.wallId = keep.id; });
+      W.splice(W.indexOf(gone),1); cnt.merge++; mk((keep.x1+keep.x2)/2,(keep.y1+keep.y2)/2,'merge'); again = true; break outer;
+    }
+  }
+  const nChanges = ()=> cnt.join+cnt.tjoin+cnt.align;
+  const pass = ()=>{
+  // 3 合并近点：端点互相在容差内的聚成一簇，簇里 V 墙定 x、H 墙定 y（并查集统一线坐标，取优先级最高者）
+  const E = []; W.slice().sort((a,b)=>prio(b)-prio(a)).forEach(w=>{ E.push({w,k:1,x:w.x1,y:w.y1}); E.push({w,k:2,x:w.x2,y:w.y2}); });
+  const cl = []; E.forEach(e=>{ let c = cl.find(c=> cls(c.m[0].w)===cls(e.w) && Math.hypot(c.x-e.x,c.y-e.y)<=tol && !c.m.some(m=>m.w===e.w)); if(!c){ c = {x:e.x,y:e.y,m:[]}; cl.push(c); } c.m.push(e); });
+  const par = new Map(W.map(w=>[w,w])); const find = w=>{ while(par.get(w)!==w) w = par.get(w); return w; };
+  cl.forEach(c=>{ const ms = c.m.filter(m=>m.w._o!=='D');
+    ms.forEach(a=> ms.forEach(b=>{ if(a.w!==b.w && a.w._o===b.w._o && Math.abs(lc(a.w)-lc(b.w))<=tol) par.set(find(a.w), find(b.w)); })); });
+  const comp = new Map(); W.forEach(w=>{ if(w._o==='D') return; const r = find(w); if(!comp.has(r)) comp.set(r,[]); comp.get(r).push(w); });
+  comp.forEach(ws=>{   // 同一组共线墙取同一个线坐标：优先下层锚点，其次优先级最高的墙
+    const top = ws.slice().sort((a,b)=>prio(b)-prio(a))[0], v = anchorOf(top)!==null ? anchorOf(top) : lc(top);
+    ws.forEach(w=>{ if(Math.abs(lc(w)-v)>.01){ setLc(w,v); cnt.align++; mk((w.x1+w.x2)/2,(w.y1+w.y2)/2,'align'); } }); });
+  W.forEach(w=>{ if(w._o==='D') return; const a = anchorOf(w); if(a!==null && Math.abs(lc(w)-a)>.01){ setLc(w,a); cnt.align++; mk((w.x1+w.x2)/2,(w.y1+w.y2)/2,'align'); } });   // 没成组的单墙也对齐下层
+  const baseEnds = []; if(below) below.walls.forEach(w=>{ if(w.type!=='fence'){ baseEnds.push([w.x1,w.y1],[w.x2,w.y2]); } });
+  cl.forEach(c=>{
+    const vs = c.m.filter(m=>m.w._o==='V'), hs = c.m.filter(m=>m.w._o==='H');
+    let X = vs.length ? lc(vs[0].w) : c.m.reduce((s,m)=>s+(m.k===1?m.w.x1:m.w.x2),0)/c.m.length;
+    let Y = hs.length ? lc(hs[0].w) : c.m.reduce((s,m)=>s+(m.k===1?m.w.y1:m.w.y2),0)/c.m.length;
+    if(c.m.length>1 && cls(c.m[0].w)==='w'){ const be = baseEnds.find(([bx,by])=>Math.hypot(bx-X,by-Y)<=tol && (!vs.length || Math.abs(bx-X)<=.05) && (!hs.length || Math.abs(by-Y)<=.05)); if(be){ X = be[0]; Y = be[1]; } }
+    let moved = false;
+    c.m.forEach(m=>{ const w = m.w, ox = m.k===1?w.x1:w.x2, oy = m.k===1?w.y1:w.y2;
+      let nx = X, ny = Y; if(w._o==='V') nx = lc(w); if(w._o==='H') ny = lc(w);   // 沿自己的轴方向挪，不离开自己的线
+      if(Math.hypot(nx-ox,ny-oy)>.01){ if(m.k===1){ w.x1=nx; w.y1=ny; } else { w.x2=nx; w.y2=ny; } moved = true; } });
+    if(moved && c.m.length>1){ cnt.join++; mk(X,Y,'join'); }
+  });
+  // 4 T 接头：悬空端点离别的墙中线在容差内 → 延伸或缩回到那条线上
+  const single = new Set(cl.filter(c=>c.m.length===1).map(c=>c.m[0].w.id+':'+c.m[0].k));
+  W.forEach(w=>{ if(w._o==='D') return;
+    [1,2].forEach(k=>{
+      if(!single.has(w.id+':'+k)) return;
+      const ex = k===1?w.x1:w.x2, ey = k===1?w.y1:w.y2; let best = null, bd = 1e9;
+      W.forEach(t=>{ if(t===w || cls(t)!==cls(w) || t._o==='D' || t._o===w._o) return;   // 只处理垂直相接
+        const c = lc(t), along = t._o==='V' ? ey : ex;
+        if(along<lo(t)-.01 || along>hi(t)+.01) return;
+        const d = Math.abs((t._o==='V' ? ex : ey) - c); if(d>.01 && d<=tol && d<bd){ bd = d; best = c; } });
+      if(best!==null){ if(w._o==='H'){ if(k===1) w.x1 = best; else w.x2 = best; } else { if(k===1) w.y1 = best; else w.y2 = best; } cnt.tjoin++; mk(w._o==='H'?best:ex, w._o==='H'?ey:best,'tjoin'); }
+    }); });
+  };
+  for(let k=0;k<3;k++){ const n0 = nChanges(); pass(); if(nChanges()===n0) break; }   // 对齐之后可能又有新的端点进入容差，多做几遍直到稳定
+  // 5 取整到 0.1cm，去掉浮点噪声
+  const r1 = v=> Math.round(v*10)/10; W.forEach(w=>{ ['x1','y1','x2','y2'].forEach(k=> w[k] = r1(w[k])); delete w._o; });
+  // 门窗按世界坐标重新算沿墙比例
+  f.openings.forEach((op,i)=>{ const w = byId(op.wallId); if(w && openPos[i]) op.t = paramOnWall(w, openPos[i][0], openPos[i][1]); });
+  // 6 楼梯：与下一层的楼梯（同旋转、四边都在容差内）对齐
+  if(below) f.stairs.forEach(s=>{ const b = below.stairs.find(o=> Math.abs((o.rot||0)-(s.rot||0))<.1 && ['x1','y1','x2','y2'].every(k=>Math.abs(o[k]-s[k])<=tol));
+    if(b && ['x1','y1','x2','y2'].some(k=>Math.abs(b[k]-s[k])>.01)){ ['x1','y1','x2','y2'].forEach(k=> s[k]=b[k]); cnt.stair++; mk((s.x1+s.x2)/2,(s.y1+s.y2)/2,'stair'); } });
+  return {floor:f, marks, cnt};
+}
+const TIDY_LABEL = {straighten:'墙拉直', merge:'重叠墙合并', join:'端点合并', tjoin:'T 接头补齐', align:'与下层对齐', stair:'楼梯对齐下层', left:'重叠但属性不同（未处理）'};
+const TIDY_COLOR = {straighten:'#f59e0b', merge:'#8b5cf6', join:'#e11d48', tjoin:'#2563eb', align:'#059669', stair:'#059669', left:'#6b7280'};
+function tidyRun(scope, tol){   // scope 'cur' | 'all'：返回每层的整理结果；整理 all 时从下往上，上层以【整理后】的下层为基准
+  const fl = JSON.parse(JSON.stringify(project.floors)), res = {}, idx = scope==='all' ? fl.map((_,i)=>i) : [project.currentFloor];
+  idx.forEach(i=>{ const r = tidyFloor(fl[i], i>0 ? fl[i-1] : null, tol); fl[i] = r.floor; res[i] = r; });
+  return res;
+}
+var tidyPrev = null;   // {scope, tol, res}：预览中
+function tidyOpen(){
+  if(spreadMode) return showToast('请先退出铺开视图');
+  tidyPrev = {scope:'cur', tol:JT_TOL}; tidyRefresh();
+}
+function tidyClose(){ tidyPrev = null; const c = document.getElementById('tidyCard'); if(c) c.hidden = true; render(); }
+function tidyRefresh(){
+  if(!tidyPrev) return;
+  tidyPrev.res = tidyRun(tidyPrev.scope, tidyPrev.tol);
+  const card = document.getElementById('tidyCard'); card.hidden = false;
+  const tot = {}; let n = 0; Object.values(tidyPrev.res).forEach(r=> Object.keys(r.cnt).forEach(k=>{ tot[k] = (tot[k]||0)+r.cnt[k]; if(k!=='left') n += r.cnt[k]; }));
+  card.innerHTML = `<b>整理墙体</b> <span style="opacity:.7">以下一层为基准；画布上用彩色圆点标出改动位置</span>
+    <div class="tcrow">范围 <select id="tdScope"><option value="cur" ${tidyPrev.scope==='cur'?'selected':''}>当前层（${esc(state.name)}）</option><option value="all" ${tidyPrev.scope==='all'?'selected':''}>全部楼层（从下往上）</option></select>
+      容差 <input type="number" id="tdTol" min="1" max="50" value="${tidyPrev.tol}" style="width:52px"> cm</div>
+    <div class="tclist">${Object.keys(TIDY_LABEL).filter(k=>tot[k]).map(k=>`<div><span class="tdot" style="background:${TIDY_COLOR[k]}"></span>${TIDY_LABEL[k]}：<b>${tot[k]}</b></div>`).join('') || '<div style="color:#15803d">✓ 没有需要整理的地方</div>'}</div>
+    <div class="tcrow"><button class="small" id="tdApply" ${n?'':'disabled'}>应用（可撤销）</button> <button class="small" id="tdCancel">取消</button></div>`;
+  document.getElementById('tdScope').onchange = e=>{ tidyPrev.scope = e.target.value; tidyRefresh(); };
+  document.getElementById('tdTol').onchange = e=>{ tidyPrev.tol = Math.max(1, Math.min(50, +e.target.value||JT_TOL)); tidyRefresh(); };
+  document.getElementById('tdCancel').onclick = tidyClose;
+  document.getElementById('tdApply').onclick = ()=>{
+    pushHistory(); tidyPrev.res = tidyRun(tidyPrev.scope, tidyPrev.tol);   // 预览之后可能又改过，按最新数据重算再应用
+    Object.keys(tidyPrev.res).forEach(i=>{ const fl = tidyPrev.res[i].floor, tgt = project.floors[i]; tgt.walls = fl.walls; tgt.openings = fl.openings; tgt.stairs = fl.stairs; });
+    tidyPrev = null; document.getElementById('tidyCard').hidden = true; syncStateRef(); render(); showPanel();
+    showToast(`已整理 ${n} 处，可用 Ctrl+Z 撤销`, 2600);
+  };
+  render();
+}
+function drawTidyMarks(){
+  if(!tidyPrev || !tidyPrev.res) return;
+  const r = tidyPrev.res[project.currentFloor]; if(!r) return;
+  ctx.save(); r.marks.forEach(m=>{ const [sx,sy] = worldToScreen(m.x,m.y); ctx.fillStyle = TIDY_COLOR[m.kind]; ctx.globalAlpha = .85; ctx.beginPath(); ctx.arc(sx,sy,6,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); }); ctx.restore();
+}
+
+function nearestEndShift(ax,ay,bx,by,excludeId){   // 拖墙身：墙的任一端点离别的墙端点在容差内 → 整面墙平移过去
+  const tol = Math.min(JT_TOL, 14/view.scale); let best = null;
+  junctionTargets(excludeId).forEach(({w})=>[[w.x1,w.y1],[w.x2,w.y2]].forEach(([ex,ey])=>[[ax,ay],[bx,by]].forEach(([px,py])=>{
+    const d = Math.hypot(ex-px,ey-py); if(d<=tol && (!best || d<best.d)) best = {d, dx:ex-px, dy:ey-py, x:ex, y:ey}; })));
+  junctionMark = best ? {x:best.x, y:best.y, kind:'end'} : null; return best;
+}
+document.getElementById('btnTidy').onclick = tidyOpen;
 // ---- 日照天空图 ----
 // 整个圆盘是一张俯视的天空图：指针相对圆心的【角度】= 太阳方位（0=北=上，顺时针），【距离】= 太阳高度——
 // 圆心是头顶（90°），盘边是地平线（0°），中间线性过渡。拖到盘外会被夹在盘边，高度限制在 5°~85°。
