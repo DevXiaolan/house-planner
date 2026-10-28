@@ -317,8 +317,8 @@
       <div class="tsplit"><button class="tool" data-tool="area-paving" id="tbSite" title="画场地要素（拖拽画矩形）">▦ <span class="tlabel">硬化地面</span></button><button class="tcaret" data-pop="popSite" title="选择场地要素">▾</button>
         <div class="mpop" id="popSite"><button class="mi" data-pick="area-paving" data-label="硬化地面" data-icon="▦"><span class="ml">▦ 硬化地面 / 道路 / 车位</span></button><button class="mi" data-pick="area-green" data-label="绿化" data-icon="❧"><span class="ml">❧ 绿化 / 花坛 / 菜地</span></button><button class="mi" data-pick="area-water" data-label="水景/构筑" data-icon="≈"><span class="ml">≈ 水景 / 凉亭 / 储物棚</span></button><div class="msep"></div><button class="mi" data-pick="area-open" data-label="露天" data-icon="▢"><span class="ml">▢ 露天（天井 / 庭院，上层可看穿）</span></button></div></div>
       <div class="tsplit"><button class="tool" data-tool="tree" id="tbTree" title="点击放置一棵树">🌳 <span class="tlabel">树</span></button><button class="tcaret" data-pop="popTree" title="选择树种">▾</button>
-        <div class="mpop" id="popTree"><button class="mi" data-treekind="deciduous"><span class="ml">阔叶（圆冠）</span></button><button class="mi" data-treekind="conifer"><span class="ml">针叶（塔形）</span></button></div></div>
-      <select id="treeKindSelect" class="small" hidden><option value="deciduous"></option><option value="conifer"></option></select>
+        <div class="mpop" id="popTree"><button class="mi" data-treekind="deciduous"><span class="ml">阔叶（圆冠）</span></button><button class="mi" data-treekind="conifer"><span class="ml">针叶（塔形）</span></button><button class="mi" data-treekind="pine"><span class="ml">松（盆景/庭院松，宋式）</span></button><button class="mi" data-treekind="bamboo"><span class="ml">竹丛</span></button><button class="mi" data-treekind="plantain"><span class="ml">芭蕉</span></button></div></div>
+      <select id="treeKindSelect" class="small" hidden><option value="deciduous"></option><option value="conifer"></option><option value="pine"></option><option value="bamboo"></option><option value="plantain"></option></select>
       <button class="tool" data-tool="roof" title="拖拽画屋顶：架在本层墙顶上，范围任意，可放多个">🏠 屋顶</button>
       <button class="tool" data-tool="column" title="点击放置柱（吸附轴线交点/下层的柱/墙端点）">▣ 柱</button>
       <button class="tool" data-tool="stair" title="拖拽画楼梯（上一层同位置会出现镂空提示）">🪜 楼梯</button>
@@ -557,6 +557,10 @@ const FURNITURE_DEFS = {
   'song-daybed':   {label:'罗汉床', w:200, h:95,  icon:'songbed', hz:80},
   'song-shelf':    {label:'博古架', w:100, h:32,  icon:'songshelf', hz:200},
   'song-stand':    {label:'花几',   w:36,  h:36,  icon:'songstand', hz:80, round:true},
+  'song-floor-lamp': {label:'纸罩落地灯', w:40, h:40, icon:'songlamp', hz:150, round:true},
+  'song-lantern':    {label:'宫灯（悬挂）', w:36, h:36, icon:'songlantern', hz:55, elev:200, round:true},
+  'song-tea-table':  {label:'茶案（含茶具）', w:110, h:60, icon:'songtea', hz:40},
+  'song-scroll':     {label:'挂轴（挂墙）', w:60, h:4, icon:'songscroll', hz:140, elev:70},
   // 车辆：w=车宽，h=车长，车头朝本地 +y（rot=0 车头朝画布下方，与人物/家具"正面朝下"一致）；cab=[车厢长占车长比例, 车厢中心相对车中心偏移比例]
   'car-small':     {label:'小型车',     w:168, h:400, icon:'car', hz:150, cab:[.55,-.04]},
   'car-sedan':     {label:'轿车',       w:185, h:470, icon:'car', hz:145, cab:[.46,-.07]},
@@ -569,7 +573,7 @@ const FURNITURE_CATS = [
   {label:'厨房', items:['stove','kitchen-sink','fridge','kitchen-cabinet','wall-cabinet','washer']},
   {label:'卫生间', items:['toilet','bathtub','bath-sink','shower']},
   {label:'庭院', items:['stone-table','stone-stool','stone-bench']},
-  {label:'宋式', items:['song-armchair','song-console','song-screen','song-daybed','song-shelf','song-stand']},
+  {label:'宋式', items:['song-armchair','song-console','song-screen','song-daybed','song-shelf','song-stand','song-floor-lamp','song-lantern','song-tea-table','song-scroll']},
   {label:'车辆', items:['car-small','car-sedan','car-suv']}
 ];
 // 每件家具可以单独设置高度 hz 和离地高度 elev（只影响 3D 和场景描述）；没设就用该类型的默认值。
@@ -1510,7 +1514,16 @@ function drawTree(tr, isSel){
   const kind = tr.kind || 'deciduous';
   ctx.save();
   ctx.translate(sx,sy);
-  if(kind==='conifer'){
+  if(kind==='bamboo'){
+    ctx.fillStyle = '#7fa65a'; ctx.strokeStyle = isSel ? getCss('--accent') : '#4f7a35'; ctx.lineWidth = isSel ? 2 : 1;
+    for(let k=0;k<9;k++){ const a = k*2.399963, rr = r*.62*Math.sqrt((k+.5)/9); ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, r*.26, 0, Math.PI*2); ctx.globalAlpha = .8; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke(); }
+  } else if(kind==='pine'){
+    ctx.fillStyle = '#3f6e4a'; ctx.strokeStyle = isSel ? getCss('--accent') : '#2d5036'; ctx.lineWidth = isSel ? 2 : 1;
+    [[-.38,.12,.5,.34],[.34,-.14,.55,.36],[0,.04,.62,.4]].forEach(([ex,ey,rx,ry])=>{ ctx.beginPath(); ctx.ellipse(ex*r, ey*r, rx*r, ry*r, .25, 0, Math.PI*2); ctx.globalAlpha = .85; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke(); });
+  } else if(kind==='plantain'){
+    ctx.fillStyle = '#6fae52'; ctx.strokeStyle = isSel ? getCss('--accent') : '#3f7a35'; ctx.lineWidth = isSel ? 2 : 1;
+    for(let k=0;k<8;k++){ ctx.save(); ctx.rotate(k*Math.PI/4); ctx.beginPath(); ctx.ellipse(r*.5, 0, r*.5, r*.17, 0, 0, Math.PI*2); ctx.globalAlpha = .85; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke(); ctx.restore(); }
+  } else if(kind==='conifer'){
     coniferCanopyPath(r);
     ctx.fillStyle = getCss('--conifer-fill');
     ctx.globalAlpha = 0.85;
@@ -2077,7 +2090,7 @@ mainCanvas.addEventListener('pointerdown', (e)=>{
     if(preHit && preHit.type!=='wall' && preHit.type!=='area' && preHit.type!=='roof'){ switchToSelectAndPick(preHit, wx, wy); return; }
     pushHistory();
     const [cx,cy] = snapColumn(wx,wy);
-    const c = {id:newId(), x:cx, y:cy, w:COL_DEF.w, d:COL_DEF.d, shape:COL_DEF.shape, rot:0, z:nextLayerZ()};
+    const c = Object.assign({id:newId(), x:cx, y:cy, w:COL_DEF.w, d:COL_DEF.d, shape:COL_DEF.shape, rot:0, z:nextLayerZ()}, project.style==='song' ? {shape:'round', plinth:true, taper:true} : {});
     state.columns.push(c); selection = {type:'column', id:c.id};
     render(); showPanel();
     return;
@@ -3472,6 +3485,9 @@ function showPanel(){
         <select id="trKind">
           <option value="deciduous" ${(tr.kind||'deciduous')==='deciduous'?'selected':''}>阔叶（圆冠）</option>
           <option value="conifer" ${tr.kind==='conifer'?'selected':''}>针叶（塔形）</option>
+          <option value="pine" ${tr.kind==='pine'?'selected':''}>松（宋式庭院松）</option>
+          <option value="bamboo" ${tr.kind==='bamboo'?'selected':''}>竹丛</option>
+          <option value="plantain" ${tr.kind==='plantain'?'selected':''}>芭蕉</option>
         </select>
       </div>
       <div class="field"><label>冠幅直径 (cm)</label><input type="number" id="trR" value="${tr.r*2}" min="40" max="1000"></div>
@@ -3497,6 +3513,8 @@ function showPanel(){
       ${round ? `<div class="field"><label>直径 (cm)</label><input type="number" id="coW" value="${c.w}" min="10" max="200"></div>`
         : `<div class="row2"><div class="field"><label>宽 (cm)</label><input type="number" id="coW" value="${c.w}" min="10" max="300"></div><div class="field"><label>深 (cm)</label><input type="number" id="coD" value="${c.d||c.w}" min="10" max="300"></div></div>
            <div class="field"><label>旋转角度 (°)</label><input type="number" id="coRot" value="${c.rot||0}" step="15"></div>`}
+      <div class="field"><label><input type="checkbox" id="coPlinth" ${c.plinth?'checked':''}> 柱础（石质础盘，宋式）</label></div>
+      ${round ? `<div class="field"><label><input type="checkbox" id="coTaper" ${c.taper?'checked':''}> 梭柱（中下部略粗，向上收分）</label></div>` : ''}
       <div class="field"><label><input type="checkbox" id="coFull" ${fullH?'checked':''}> 通层高（${state.heightCm||300} cm）</label></div>
       ${fullH ? '' : `<div class="field"><label>柱高 (cm)</label><input type="number" id="coHz" value="${c.hz}" min="20" max="900"></div>`}
       <div class="row2">
@@ -3510,6 +3528,7 @@ function showPanel(){
     cs('coW', t=>{ c.w = Math.max(10,+t.value||c.w); if(c.shape==='round') c.d = c.w; });
     cs('coD', t=>{ c.d = Math.max(10,+t.value||c.d); });
     cs('coRot', t=>{ c.rot = (((+t.value||0)%360)+360)%360; });
+    cs('coPlinth', t=>{ c.plinth = t.checked; }); cs('coTaper', t=>{ c.taper = t.checked; });
     cs('coFull', t=>{ if(t.checked) delete c.hz; else c.hz = state.heightCm||300; });
     cs('coHz', t=>{ c.hz = Math.max(20,+t.value||c.hz); });
     cs('coX', t=>{ c.x = +t.value||0; }); cs('coY', t=>{ c.y = +t.value||0; });
@@ -3579,7 +3598,7 @@ function showPanel(){
         <div class="field"><label>Y 坐标（左上角，cm）</label><input type="number" id="arY" value="${Math.min(ar.y1,ar.y2).toFixed(0)}"></div>
       </div>
       ${ar.kind==='paving'||ar.kind==='green' ? `<div class="field"><label>地面高度偏移 (cm，负=下沉)</label><input type="number" id="arLift" value="${typeof ar.lift==='number'?ar.lift:0}" min="-100" max="100" step="5"></div>
-      <div class="hint" style="margin-bottom:8px;">只影响 3D：填 -30 就是比相邻回廊低 30cm 的下沉花园（四周自动砌挡墙，上面的树/家具/池塘跟着下沉）；正数是抬高的台地。</div>` : ''}
+      <div class="hint" style="margin-bottom:8px;">只影响 3D：填 -30 就是比相邻回廊低 30cm 的下沉花园（四周自动砌挡墙，上面的树/家具/池塘跟着下沉）；正数是抬高的台地（≥8cm 自动加压阑石，≥15cm 加地栿，可加台阶）。</div>${(ar.lift||0)>=8 ? `<div class="field"><label>台基台阶（踏步）</label><select id="arSteps">${[['','无'],['s','南侧'],['n','北侧'],['w','西侧'],['e','东侧'],['ns','南北两侧'],['ew','东西两侧'],['nsew','四面']].map(([k,l])=>`<option value="${k}" ${(ar.steps||'')===k?'selected':''}>${l}</option>`).join('')}</select></div>` : ''}` : ''}
       <div class="hint">${ar.fillGroup ? '这是「房间填充」生成的地块（共用同一组）：在房间上右键可整体更换材质或清除。' : ''}可在画布上直接拖动整体移动，也可以在这里直接输入左上角坐标精确定位。</div>
       <button class="small danger" id="arDel" style="width:100%;">删除</button>
     `;
@@ -3587,7 +3606,8 @@ function showPanel(){
       pushHistory(); ar.kind = e.target.value; ar.material = matOptions[ar.kind][0]; showPanel(); render();
     };
     document.getElementById('arMat').onchange = (e)=>{ pushHistory(); ar.material = e.target.value; render(); };
-    if(document.getElementById('arLift')) document.getElementById('arLift').onchange = (e)=>{ pushHistory(); const v = Math.max(-100,Math.min(100,+e.target.value||0)); if(v) ar.lift = v; else delete ar.lift; render(); };
+    if(document.getElementById('arLift')) document.getElementById('arLift').onchange = (e)=>{ pushHistory(); const v = Math.max(-100,Math.min(100,+e.target.value||0)); if(v) ar.lift = v; else { delete ar.lift; delete ar.steps; } render(); showPanel(); };
+    if(document.getElementById('arSteps')) document.getElementById('arSteps').onchange = (e)=>{ pushHistory(); if(e.target.value) ar.steps = e.target.value; else delete ar.steps; render(); };
     document.getElementById('arW').onchange = (e)=>{ pushHistory(); ar.x2 = ar.x1 + Math.max(20,+e.target.value||w); render(); };
     document.getElementById('arH').onchange = (e)=>{ pushHistory(); ar.y2 = ar.y1 + Math.max(20,+e.target.value||h); render(); };
     document.getElementById('arX').onchange = (e)=>{
@@ -4050,7 +4070,7 @@ function describeFurnitureLine(fu, floorH){
   return `家具「${displayName}」（模型：${def.label}，尺寸 ${fu.w.toFixed(0)}×${fu.h.toFixed(0)}cm，高 ${furnitureHeight(fu,floorH).toFixed(0)}cm${furnitureElev(fu)>0?`，离地 ${furnitureElev(fu).toFixed(0)}cm`:''}，朝向 ${Math.round(fu.rot||0)}°，中心坐标 (${fu.x.toFixed(0)}, ${fu.y.toFixed(0)})）`;
 }
 function describeTreeLine(tr){
-  return `树木（${(tr.kind==='conifer')?'针叶（塔形）':'阔叶（圆冠）'}，冠幅约 ${(tr.r*2).toFixed(0)}cm，位置 (${tr.x.toFixed(0)}, ${tr.y.toFixed(0)})）`;
+  return `树木（${({conifer:'针叶（塔形）',pine:'松',bamboo:'竹丛',plantain:'芭蕉'})[tr.kind]||'阔叶（圆冠）'}，冠幅约 ${(tr.r*2).toFixed(0)}cm，位置 (${tr.x.toFixed(0)}, ${tr.y.toFixed(0)})）`;
 }
 function describePersonLine(pe){
   const nm = (pe.name||'').trim();
@@ -4528,10 +4548,11 @@ function fenceDims(wl){
 const STAIR_MATS = { oak:{label:'橡木', hex:'#cdb08a', tex:'oak'}, walnut:{label:'胡桃', hex:'#76503a', tex:'walnut'}, stone:{label:'石材', hex:'#d9d2c4', rough:.35}, concrete:{label:'清水混凝土', hex:'#a9a8a3', rough:.9},
                      black:{label:'黑色金属', hex:'#2a2c30', metal:.7, rough:.4}, white:{label:'白色烤漆', hex:'#efece6', rough:.45}, steel:{label:'不锈钢', hex:'#c4c7cb', metal:.85, rough:.3} };
 const STAIR_UNDER = { solid:'实心（梯下不用）', storage:'梯下储物（柜门）', open:'通透（斜梁+踏板）', cantilever:'悬挑（踏板从墙内挑出，无斜梁）' };
-const STAIR_RAIL = { none:'无栏杆', picket:'竖杆栏杆', bars:'横杆栏杆', glass:'玻璃栏板', solid:'实心栏板', iron:'铁艺栏杆' };
+const STAIR_RAIL = { none:'无栏杆', picket:'竖杆栏杆', bars:'横杆栏杆', glass:'玻璃栏板', solid:'实心栏板', iron:'铁艺栏杆', gou:'勾栏（宋式：望柱+华板+寻杖）' };
 const STAIR_HAND = { none:'无扶手', round:'圆管扶手', wood:'方木扶手', flat:'扁钢扶手' };
 // 栏杆方案：一键套用（rail/handrail/post/railSide/railH + 梯身材质），之后仍可在下方单项微调
 const STAIR_RAIL_PRESETS = {
+  gou:    {label:'宋式勾栏（望柱+华板+寻杖）', rail:'gou', handrail:'round', post:'fat', railSide:'both', railH:90, stringerMat:'walnut'},
   glass:  {label:'现代玻璃栏板', rail:'glass', handrail:'flat',  post:'none', railSide:'outer', railH:90, stringerMat:'steel'},
   iron:   {label:'黑色铁艺竖杆', rail:'iron',  handrail:'round', post:'slim', railSide:'outer', railH:90, stringerMat:'black'},
   wood:   {label:'胡桃木竖杆',   rail:'picket',handrail:'wood',  post:'fat',  railSide:'both',  railH:92, stringerMat:'walnut'},
@@ -4611,7 +4632,7 @@ function gableField(inside, cols, rows, S, alongX, eave, span){
 // 双坡 = 只沿垂直屋脊的方向量距离（见 gableField）。屋面从外墙顶边往外下探出檐，往内逐渐抬高；
 // 天井（露天洞）一侧同样向洞内出檐，所以合院是"四水归堂"的样子。
 // ponytail: 四坡跨度超过 2×MAXD 会变成平台（双坡已按 SPAN 分屋脊）；屋面是单层面，没有厚度。
-function buildSlopeRoof(parent, rects, yBase, rc, material){
+function buildSlopeRoof(parent, rects, yBase, rc, material, gableMat){
   if(!rects.length) return;
   const S = 5, V = 10, MAXD = 450, SPAN = 900; // S=距离场栅格(cm)，V=网格顶点间距(cm)
   let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
@@ -4686,15 +4707,16 @@ function buildSlopeRoof(parent, rects, yBase, rc, material){
     const tx = gl>1e-3 ? -gzp/gl : 1, tz = gl>1e-3 ? gxp/gl : 0;
     uvs[k*2] = ((gx0+i*V)*tx+(gy0+j*V)*tz)/64; uvs[k*2+1] = dc/cosP/40;
   }
-  const idx = [];
+  const idx = [], gIdx = [];
   for(let j=0;j<vr-1;j++) for(let i=0;i<vc-1;i++){
     const a=j*vc+i, b=a+1, c=a+vc, e=c+1;
     if(Math.max(dv[a],dv[b],dv[c],dv[e]) <= -rc.eave) continue; // 整格都在出檐范围外
-    idx.push(a,c,b, b,c,e);
+    (xs && Math.max(dv[a],dv[b],dv[c],dv[e])-Math.min(dv[a],dv[b],dv[c],dv[e]) > 25 ? gIdx : idx).push(a,c,b, b,c,e);   // 歇山收山处的陡坎 = 山花，单独一个网格（白墙材质）
   }
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.BufferAttribute(pos,3)); geo.setAttribute('uv', new T.BufferAttribute(uvs,2)); geo.setIndex(idx); geo.computeVertexNormals();
   const mesh = new T.Mesh(geo, material); mesh.castShadow = mesh.receiveShadow = true; parent.add(mesh);
+  if(gIdx.length){ const g2 = new T.BufferGeometry(); g2.setAttribute('position', geo.attributes.position); g2.setAttribute('uv', geo.attributes.uv); g2.setIndex(gIdx); g2.computeVertexNormals(); const m2 = new T.Mesh(g2, gableMat||material); m2.castShadow = m2.receiveShadow = true; parent.add(m2); }
   // 给无人机碰撞用：世界坐标(米) → 该处屋面高度(米)，没有屋面返回 null（双线性插值）
   mesh.userData.roofSample = (X,Z)=>{
     const fi=(X*100-gx0)/V, fj=(Z*100-gy0)/V, i=Math.floor(fi), j=Math.floor(fj);
@@ -4739,7 +4761,8 @@ function furnitureParts(fu, H){
     const seatH = 48, armY = seatH+24, r = w/2-5, zf = d/2-5, cz0 = -d/2+r+3, n = 9;
     corners.forEach(([sx,sz])=> cy('sowood',sx*r,0,sz*zf,3.4,sz>0?armY:seatH,3.4));
     bx('sowood',0,seatH-3,0,w-4,3.5,d-4); soft('oat',0,seatH+.5,0,w-12,3,d-12);
-    bx('sowood',0,seatH,-d/2+7,9,H-seatH-8,2.6,{rx:-.12});                                  // 靠背板（微后倾）
+    { const bz = -d/2+7, sg3 = (H-seatH-6)/3;   // 靠背板：S 形（下段后倾、中段前凸、上段后仰）
+      bx('sowood',0,seatH,bz-1,9,sg3+1,2.6,{rx:-.28}); bx('sowood',0,seatH+sg3,bz-1.8,9,sg3+.6,2.6,{rx:.1}); bx('sowood',0,seatH+sg3*2,bz-1.2,9,sg3+.6,2.6,{rx:-.2}); }
     for(let i=0;i<n;i++){ const a0 = Math.PI*(1+i/n), a1 = Math.PI*(1+(i+1)/n), am = (a0+a1)/2;
       bx('sowood', r*Math.cos(am), armY, cz0+r*Math.sin(am), r*Math.PI/n*1.15, 3.2, 3.2, {ry:-(am+Math.PI/2)}); }   // 后半圆
     [-1,1].forEach(sg=> bx('sowood', sg*r, armY, (cz0+zf)/2, 3.2, 3.2, zf-cz0));              // 两侧伸向前腿的扶手
@@ -4765,6 +4788,17 @@ function furnitureParts(fu, H){
       for(let k=0;k<n;k++){ const y=8+(H-16)*(k+.7+rn()*.35)/(n+.5); bx('sowood',cx,y,0,cw-1,2.4,d-3);
         if(rn()<.75){ if(rn()<.5) cy('celadon',cx+(rn()-.5)*cw*.3,yPrev+2.4*(k>0),0,8+rn()*4,10+rn()*12,8+rn()*4); else sp('celadon',cx,yPrev+2.4*(k>0)+5,0,10,10,10); }
         yPrev=y; } if(c<2) bx('sowood',cx+cw/2,8,0,2.2,H-12,d-3); }
+  } else if(icon==='songlamp'){   // 纸罩落地灯：圆座 + 细杆 + 发光的圆柱纸罩
+    cy('sowood',0,0,0,w*.6,3,w*.6); cy('sowood',0,3,0,2.6,H*.5,2.6); cy('lamp',0,H*.5,0,w,H*.46,w); cy('sowood',0,H*.96,0,w*.7,2.4,w*.7); cy('sowood',0,H*.5-1.6,0,w*.7,1.8,w*.7);
+  } else if(icon==='songlantern'){   // 宫灯：六角（用圆柱近似）灯身 + 上下木盖 + 穗子
+    cy('rust',0,0,0,1.6,H*.2,1.6); cy('sowood',0,H*.2,0,w*.9,3,w*.9); cy('lamp',0,H*.2+3,0,w*.8,H*.52,w*.8); cy('sowood',0,H*.2+3+H*.52,0,w*.9,3,w*.9); cy('sowood',0,H*.2+6+H*.52,0,4,H*.2,4);
+    corners.forEach(([sx,sz])=> cy('sowood',sx*w*.3,H*.2+3,sz*w*.3,1.6,H*.52,1.6));
+  } else if(icon==='songtea'){   // 茶案：低案 + 茶盘 + 提梁壶 + 茶盏
+    bx('sowood',0,H-4,0,w,4,d); corners.forEach(([sx,sz])=> cy('sowood',sx*(w/2-6),0,sz*(d/2-6),4.6,H-4,4.6)); bx('sowood',0,H-9,0,w-14,5,2.2);
+    bx('dark',0,H,0,w*.5,1.4,d*.5); cy('celadon',-w*.12,H+1.4,0,10,9,10); sp('celadon',-w*.12,H+9,0,11,6,11); [-1,0,1].forEach(i=> cy('celadon',w*.1+i*7,H+1.4,(i%2?5:-5),5,3.4,5));
+  } else if(icon==='songscroll'){   // 挂轴：宣纸画心 + 上下天杆地杆 + 几笔墨迹
+    bx('paper',0,10,0,w-8,H-18,.8); P.push(['sowood',0,H-7,0,w,2.6,2.6,'cylx']); P.push(['sowood',0,5,0,w,3,3,'cylx']);
+    for(let i=0;i<5;i++) bx('dark',-w*.3+i*w*.15,30+rn()*40,.5,1.6,8+rn()*26,.2);
   } else if(icon==='songstand'){   // 花几：圆面三足 + 青瓷花瓶 + 枝叶
     bx('sowood',0,H-3,0,w,3,w); cy('sowood',0,H-3,0,w,3,w);
     [0,1,2].forEach(i=>{ const a=i*Math.PI*2/3+.5; cy('sowood',Math.cos(a)*w*.3,0,Math.sin(a)*w*.3,3.4,H-3,3.4); });
@@ -4855,6 +4889,7 @@ function furnitureParts(fu, H){
 // ---- 视觉品质：程序化材质库 ----
 // 做法参考同类室内渲染：窄色板 + 程序化贴图（带色差/纹理/粗糙度变化，按真实尺寸铺）+ 圆角几何 + 软包几何
 // + ACES 色调映射 + 环境反射 + 接触阴影。贴图全部是 canvas 现画，不依赖任何外部图片；随机数用固定种子，每次打开都一样。
+let REFL = null; // Reflector（水面倒影，和 three 一起懒加载，失败就退回普通水面）
 let RBG = null; // RoundedBoxGeometry 类（和 three 一起懒加载）
 let _seed = 20261023;
 function rnd(){ _seed=(_seed*1664525+1013904223)>>>0; return _seed/4294967296; }
@@ -5115,6 +5150,7 @@ function wallBoxGeo(sx,sy,sz,tile){
 }
 function disposeGroup(grp){
   grp.traverse(o=>{
+    if(o.userData && o.userData.refl && o.dispose){ o.dispose(); return; }   // Reflector 自带渲染目标
     if(o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
     [].concat(o.material||[]).forEach(m=>{ ['map','bumpMap','alphaMap'].forEach(k=>{ if(m[k]) m[k].dispose(); }); m.dispose(); });
   });
@@ -5133,6 +5169,7 @@ function mainBbox(){   // 主体建筑占地：所有楼层外墙（没有外墙
 }
 function build3D(maxFloor, opts){
   opts = opts || {}; // 镜头渲染用：{roof:{...}覆盖屋顶设置, ceiling:true 补天花板（室内镜头）, people:false 隐藏参照人物}
+  let reflN = 0;
   const g = new T.Group(), SONG = project.style==='song';   // 宋式预设：暖石灰白墙、青灰瓦、素木、柔光
   const box = new T.BoxGeometry(1,1,1), cylGeo = new T.CylinderGeometry(.5,.5,1,24), sphGeo = new T.SphereGeometry(.5,24,16), planeGeo = new T.PlaneGeometry(1,1);
   const std = (c,o)=> new T.MeshStandardMaterial({color:c, roughness:.8, envMapIntensity:.45, ...(o||{})});
@@ -5173,7 +5210,10 @@ function build3D(maxFloor, opts){
     cglass: std('#1d2a36',{roughness:.12, metalness:.2, envMapIntensity:1.3}), tire: std('#1f2023',{roughness:.9}),
     lamp: new T.MeshBasicMaterial({color:'#fff2c4'}), tail: std('#b03a2e',{roughness:.4}),
     glassM: M.glass, frame: SONG ? std('#3a2d24',{roughness:.6, metalness:.05, envMapIntensity:.4}) : std('#24282c',{roughness:.4, metalness:.7, envMapIntensity:.8}),
-    sowood: phys('#ffffff',{map:grainS, roughness:.6, envMapIntensity:.4}), paper: std('#f1e8d2',{roughness:.95, emissive:'#f1e8d2', emissiveIntensity:.12, envMapIntensity:.3}), celadon: std('#a9c4b2',{roughness:.28, envMapIntensity:.9}), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
+    sowood: phys('#ffffff',{map:grainS, roughness:.6, envMapIntensity:.4}), paper: std('#f1e8d2',{roughness:.95, emissive:'#f1e8d2', emissiveIntensity:.12, envMapIntensity:.3}), celadon: std('#a9c4b2',{roughness:.28, envMapIntensity:.9}),
+    coping: std('#cfcabb',{roughness:.85}), colBase: std('#c4bfb0',{roughness:.9}), lejiao: std('#a9a79e',{roughness:.92}), joint: std('#ada48c',{roughness:1}),
+    bamboo: std('#93b25f',{roughness:.7}), bambooLeaf: std('#6f9a45',{roughness:.8, side:T.DoubleSide}), pine: std('#33613f',{roughness:.85}), plantain: std('#6fae52',{roughness:.7, side:T.DoubleSide}),
+    lamp: std('#f6e9c8',{roughness:.9, emissive:'#f0d9a0', emissiveIntensity:.55}), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
   };
   const _fm = {}; const fenceMat = k => _fm[k] || (_fm[k] = (k==='black'||k==='bronze') ? std(FENCE_COLORS[k].hex,{roughness:.4, metalness:.65, envMapIntensity:.9}) : std(FENCE_COLORS[k].hex,{roughness:.72, envMapIntensity:.4}));
   const _sm = {};
@@ -5236,7 +5276,18 @@ function build3D(maxFloor, opts){
       const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.BufferAttribute(pos,3)); geo.setAttribute('uv',new T.BufferAttribute(uv,2)); geo.setIndex([0,2,1,1,2,3]); geo.computeVertexNormals();
       const m=new T.Mesh(geo,mats.tile); m.castShadow=m.receiveShadow=true; parent.add(m);
       m.userData.roofSample=(X,Z)=> (X*100<X0||X*100>X1||Z*100<Z0||Z*100>Z1) ? null : (yb+3+hAt(X*100,Z*100))/100;
-    } else buildSlopeRoof(parent, [{x:x1,y:y1,w:x2-x1,h:y2-y1}], (yb+3)/100, {style:st, pitch:rf.pitch||30, eave:e, ridge:rf.ridge||'auto', curve:rf.curve||0}, mats.tile);
+    } else {
+      const yR = yb+3+Math.tan((rf.pitch||30)*Math.PI/180)*26;   // 屋面整体略抬高：外墙有厚度，屋面在墙外侧比墙顶低，不抬的话墙顶会从屋面下露出一条
+      buildSlopeRoof(parent, [{x:x1,y:y1,w:x2-x1,h:y2-y1}], yR/100, {style:st, pitch:rf.pitch||30, eave:e, ridge:rf.ridge||'auto', curve:rf.curve||0}, mats.tile, mats.ext);
+      if(st==='xieshan' && mats.wood){   // 山花上的竖向木格栅 + 下枋
+        const W = x2-x1, Dd = y2-y1, alongX = rf.ridge==='x' || (rf.ridge!=='y' && W>=Dd), Lr = alongX ? W : Dd, half = (alongX ? Dd : W)/2, sIn = Math.min(Lr*.2, 300), tanP = Math.tan((rf.pitch||30)*Math.PI/180), cv = rf.curve||0;
+        const Hf = d=> tanP*(d + cv*.6*d*(d+2*e)/600), hLow = Hf(sIn), c0 = alongX ? (y1+y2)/2 : (x1+x2)/2, b0 = yR;
+        if(half>sIn+6) (alongX ? [x1+sIn-3, x2-sIn+3] : [y1+sIn-3, y2-sIn+3]).forEach(ep=>{
+          for(let q=-(half-sIn); q<=half-sIn+.01; q+=14){ const hh = Hf(half-Math.abs(q))-hLow; if(hh<4) continue; const cy_ = b0+hLow+hh/2; if(alongX) box(mats.wood, ep, cy_, c0+q, 2.6, hh, 2.4); else box(mats.wood, c0+q, cy_, ep, 2.4, hh, 2.6); }
+          if(alongX) box(mats.wood, ep, b0+hLow+1.5, c0, 3.2, 3, 2*(half-sIn)); else box(mats.wood, c0, b0+hLow+1.5, ep, 2*(half-sIn), 3, 3.2);
+        });
+      }
+    }
   };
   const y0 = []; let acc = 0;
   project.floors.forEach((f,i)=>{ y0[i] = acc; acc += f.heightCm||300; });
@@ -5310,7 +5361,11 @@ function build3D(maxFloor, opts){
         if(fence && fstyle!=='solid' && !(fstyle==='lattice' && lat) && !(fstyle==='half' && yHi<=fd3.base+.01)) return;   // 镂空样式的墙体部分另有画法（见下面）；lat=花格墙自己的孔切分在调用 seg
         addW(fence ? fenceMat(fd3.color) : wm, wl.x1+ux*s, base+(yLo+yHi)/2, wl.y1+uz*s, s1-s0, yHi-yLo, t, ry);
         if(!fence && yLo===0 && yHi>12){
-          addR(FM.trim, wl.x1+ux*s, base+4, wl.y1+uz*s, s1-s0, 8, t+1.6, ry, cur, .3);
+          if(SONG && wl.type==='ext'){   // 宋式外墙：一层石质勒脚（墙根一圈）+ 粉墙上的竖向分缝
+            if(fi===0) addR(FM.lejiao, wl.x1+ux*s, base+15, wl.y1+uz*s, s1-s0, 30, t+2.4, ry, cur, .3);
+            else addR(FM.trim, wl.x1+ux*s, base+4, wl.y1+uz*s, s1-s0, 8, t+1.6, ry, cur, .3);
+            if(yHi>=h-1) for(let q=Math.ceil((s0+8)/120)*120; q<s1-8; q+=120) addR(FM.joint, wl.x1+ux*q, base+(fi===0?30+h:h)/2+(fi===0?0:4), wl.y1+uz*q, .7, fi===0?h-30:h-8, t+.6, ry, cur, .1);
+          } else addR(FM.trim, wl.x1+ux*s, base+4, wl.y1+uz*s, s1-s0, 8, t+1.6, ry, cur, .3);
           if(s1-s0>20){ strip(s,s1-s0,1); strip(s,s1-s0,-1); }
         }
       };
@@ -5440,6 +5495,25 @@ function build3D(maxFloor, opts){
       else if(!struct) mt = softGroundMat(ar.kind, ar.material, aw, ah);
       const bot = lift<0 ? lift-10 : 0, topY = hh+lift;   // 下沉时地块往下延伸，露出下面的坑；抬高时从 0 起
       add(mt || (struct?M.struct:M.slab), (ar.x1+ar.x2)/2, base+(bot+topY)/2, (ar.y1+ar.y2)/2, aw, topY-bot, ah).userData.solid = !!struct; // 地面铺装不挡无人机，凉亭/棚子才挡
+      if(ar.kind==='water' && !struct && REFL && reflN<2 && opts.reflect!==false){   // 水面倒影（最多 2 块，每块多渲一遍场景）
+        reflN++;
+        const rp = new REFL(new T.PlaneGeometry(aw/100, ah/100), {textureWidth:512, textureHeight:512, color:0x3f6f7a, clipBias:.003});
+        try{ rp.material.fragmentShader = rp.material.fragmentShader.replace('gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );','gl_FragColor = vec4( blendOverlay( base.rgb, color ), .4 );'); rp.material.transparent = true; }catch(_){}
+        rp.rotation.x = -Math.PI/2; rp.position.set((ar.x1+ar.x2)/200, (base+topY+.3)/100, (ar.y1+ar.y2)/200); rp.userData.refl = true; cur.add(rp);
+      }
+      if(!struct && typeof ar.lift==='number' && lift>=8 && (ar.kind==='paving'||ar.kind==='green')){   // 台基：压阑石（顶面一圈）+ 地栿（底部略出）+ 可选台阶
+        const x1_=Math.min(ar.x1,ar.x2), x2_=Math.max(ar.x1,ar.x2), z1_=Math.min(ar.y1,ar.y2), z2_=Math.max(ar.y1,ar.y2), cx_=(x1_+x2_)/2, cz_=(z1_+z2_)/2, ct=6;
+        add(FM.coping, cx_, base+topY+1.5, z1_+ct/2-1, aw+2, 3, ct); add(FM.coping, cx_, base+topY+1.5, z2_-ct/2+1, aw+2, 3, ct);
+        add(FM.coping, x1_+ct/2-1, base+topY+1.5, cz_, ct, 3, ah-2*ct+4); add(FM.coping, x2_-ct/2+1, base+topY+1.5, cz_, ct, 3, ah-2*ct+4);
+        if(lift>=15) add(FM.coping, cx_, base+4, cz_, aw+3, 8, ah+3);
+        const nS = Math.max(1, Math.ceil(topY/16)), rise = topY/nS, gT = 32;
+        [...(ar.steps||'')].forEach(sd=>{
+          const horiz = sd==='n'||sd==='s', wS = Math.min((horiz?aw:ah)*.6, 180);
+          for(let k=1;k<nS;k++){ const off = (nS-1-k)*gT+gT/2, hk = rise*k;
+            if(sd==='n') add(FM.coping, cx_, base+hk/2, z1_-off, wS, hk, gT); else if(sd==='s') add(FM.coping, cx_, base+hk/2, z2_+off, wS, hk, gT);
+            else if(sd==='w') add(FM.coping, x1_-off, base+hk/2, cz_, gT, hk, wS); else if(sd==='e') add(FM.coping, x2_+off, base+hk/2, cz_, gT, hk, wS); }
+        });
+      }
       if(typeof ar.lift==='number' && lift<0 && !struct){   // 下沉：四周补一圈石砌挡墙（内侧贴地块边缘，顶面比回廊高 1cm）
         const wt=8, wy0=topY, wy1=4, cx=(ar.x1+ar.x2)/2, cz=(ar.y1+ar.y2)/2;
         [[cx,Math.min(ar.y1,ar.y2)+wt/2,aw,wt],[cx,Math.max(ar.y1,ar.y2)-wt/2,aw,wt],[Math.min(ar.x1,ar.x2)+wt/2,cz,wt,ah],[Math.max(ar.x1,ar.x2)-wt/2,cz,wt,ah]]
@@ -5449,10 +5523,18 @@ function build3D(maxFloor, opts){
 
     eachSrc(f.columns||[],'column',c=>{
       const hz = typeof c.hz==='number' ? c.hz : H, d = c.shape==='round' ? c.w : (c.d||c.w);
-      if(c.shape==='round'){ const m = new T.Mesh(cylGeo, M.col); m.scale.set(c.w/100, hz/100, c.w/100); m.position.set(c.x/100,(base+hz/2)/100,c.y/100); m.castShadow=m.receiveShadow=true; m.userData.solid=true; cur.add(m); }
-      else add(M.col, c.x, base+hz/2, c.y, c.w, hz, d, -(c.rot||0)*Math.PI/180, cur);
+      const pH = c.plinth ? 14 : 0, h0 = Math.max(10, hz-pH), r0 = c.w/200, rotc = -(c.rot||0)*Math.PI/180;
+      const solid_ = m=>{ m.castShadow=m.receiveShadow=true; m.userData.solid=true; cur.add(m); return m; };
+      if(c.plinth){   // 柱础：宽扁的础盘 + 上面一圈覆盆
+        if(c.shape==='round'){ [[1.45,.6,.3],[1.2,.4,.8]].forEach(([k,hk,yk])=>{ const b = new T.Mesh(cylGeo, FM.colBase); b.scale.set(c.w*k/100, pH*hk/100, c.w*k/100); b.position.set(c.x/100,(base+pH*yk)/100,c.y/100); solid_(b); }); }
+        else { add(FM.colBase, c.x, base+pH*.3, c.y, c.w*1.45, pH*.6, d*1.45, rotc, cur); add(FM.colBase, c.x, base+pH*.8, c.y, c.w*1.2, pH*.4, d*1.2, rotc, cur); }
+      }
+      if(c.shape==='round'){
+        if(c.taper){ [[0,1/3,.9,1],[1/3,1,1,.78]].forEach(([f0,f1,rb,rt])=>{ const m = new T.Mesh(new T.CylinderGeometry(r0*rt, r0*rb, h0*(f1-f0)/100, 24), M.col); m.position.set(c.x/100,(base+pH+h0*(f0+f1)/2)/100,c.y/100); solid_(m); }); }   // 梭柱：下 1/3 处最粗，向上收分
+        else { const m = new T.Mesh(cylGeo, M.col); m.scale.set(c.w/100, h0/100, c.w/100); m.position.set(c.x/100,(base+pH+h0/2)/100,c.y/100); solid_(m); }
+      } else add(M.col, c.x, base+pH+h0/2, c.y, c.w, h0, d, rotc, cur);
     });
-    eachSrc(f.roofs||[],'roof',rf=> roofItem(cur, rf, base+H+(rf.lift||0), {tile:M.tile, flat:M.roof, ext:M.ext}, (m,cx,cy,cz,sx,sy,sz)=>add(m,cx,cy,cz,sx,sy,sz,0,cur)));
+    eachSrc(f.roofs||[],'roof',rf=> roofItem(cur, rf, base+H+(rf.lift||0), {tile:M.tile, flat:M.roof, ext:M.ext, wood:FM.wood}, (m,cx,cy,cz,sx,sy,sz)=>add(m,cx,cy,cz,sx,sy,sz,0,cur)));
     eachSrc(f.trees,'tree',tr=>{
       const r = tr.r/100, conifer = tr.kind==='conifer', grp = new T.Group();
       grp.position.set(tr.x/100, (base+floorY(tr.x,tr.y))/100, tr.y/100); cur.add(grp);
@@ -5461,6 +5543,28 @@ function build3D(maxFloor, opts){
       [[0,0,.5,'#5a4130'],[.3,.15,.34,'#4c3626'],[-.28,.1,.3,'#664c38'],[.05,-.3,.32,'#554030'],[-.15,-.2,.26,'#4c3626']].forEach(([dx,dz,k,col],i)=>{
         const sd = new T.Mesh(new T.CylinderGeometry(Math.max(.28,.3+r*k*.55),Math.max(.3,.32+r*k*.58),.02,20), std(col,{roughness:1}));
         sd.position.set(dx*Math.max(.3,r*.5), soilY+.012+i*.0015, dz*Math.max(.3,r*.5)); sd.receiveShadow = true; grp.add(sd); });
+      if(tr.kind==='bamboo' || tr.kind==='pine' || tr.kind==='plantain'){
+        let sd = ((tr.id||1)*7919)%1000+1; const rn = ()=>{ sd = (sd*9301+49297)%233280; return sd/233280; };
+        const put = (m,geo,x,y,z,sx,sy,sz,rx,ry,rz)=>{ const o = new T.Mesh(geo,m); o.position.set(x,y,z); o.scale.set(sx,sy,sz); o.rotation.set(rx||0,ry||0,rz||0); o.castShadow = o.receiveShadow = true; o.userData.solid = true; grp.add(o); return o; };
+        if(tr.kind==='bamboo'){   // 竹丛：十来根细竿 + 竿顶的叶簇
+          const nB = 11, H0 = 3.4+Math.min(r,1.6)*1.3;
+          for(let k=0;k<nB;k++){ const a = k*2.399963+rn(), rr = r*.6*Math.sqrt((k+.5)/nB), h = H0*(.72+.28*rn()), lean = (rn()-.5)*.14, px = Math.cos(a)*rr, pz = Math.sin(a)*rr;
+            put(FM.bamboo, cylGeo, px, h/2, pz, .045, h, .045, 0, 0, lean);
+            for(let q=0;q<4;q++){ const la = rn()*6.28, hy = h*(.72+.08*q); put(FM.bambooLeaf, sphGeo, px-Math.sin(lean)*hy+Math.cos(la)*.22, hy, pz+Math.sin(la)*.22, .8, .12, .3, 0, la, .25+rn()*.3); } }
+        } else if(tr.kind==='pine'){   // 庭院松：弯曲的主干 + 层层错落的扁平树冠
+          let x = 0, y = 0; [[.12,.9,.1],[-.1,.8,.09],[.14,.75,.075]].forEach(([dx,len,rad])=>{ put(M.trunk, cylGeo, x+dx/2, y+len/2, 0, rad*2, Math.hypot(dx,len), rad*1.8, 0, 0, -Math.atan2(dx,len)); x += dx; y += len; });
+          const rr = Math.max(.9, r);
+          [[-.5,.5,.15,.8,.2],[.55,.68,-.2,.75,.18],[-.1,.88,.25,.62,.16],[.1,1.04,-.1,.46,.14]].forEach(([dx,fy,dz,k,th])=> put(FM.pine, sphGeo, x*fy*.9+dx*rr*.8, y*fy+.25, dz*rr*.8, rr*k*2.3, rr*th*2, rr*k*1.9, 0, 0, dx*.12));
+          put(M.trunk, cylGeo, x*.6-.25, y*.55, 0, .06, .8, .06, 0, 0, 1.0);   // 一根斜出的侧枝
+        } else {   // 芭蕉：短粗的假茎 + 八九片向外下垂的大叶
+          put(M.trunk, cylGeo, 0, .45, 0, .16, .9, .16);
+          for(let k=0;k<8;k++){ const L = (.9+r*.9)*.55, wd = .34+r*.14, piv = new T.Group(), pv2 = new T.Group(), pv3 = new T.Group(); piv.position.set(0,.9+rn()*.25,0); piv.rotation.y = k*Math.PI/4+rn()*.4; pv2.rotation.z = .85-rn()*.25; piv.add(pv2);
+            const l1 = new T.Mesh(box, FM.plantain); l1.scale.set(L,.012,wd); l1.position.set(L/2,0,0); pv2.add(l1);
+            pv3.position.set(L,0,0); pv3.rotation.z = -1.15; pv2.add(pv3); const l2 = new T.Mesh(box, FM.plantain); l2.scale.set(L*.95,.012,wd*.8); l2.position.set(L*.475,0,0); pv3.add(l2);   // 叶片先向上斜出、末端下垂
+            [l1,l2].forEach(m=>{ m.castShadow = m.receiveShadow = true; m.userData.solid = true; }); grp.add(piv); }
+        }
+        return;
+      }
       const trunkH = conifer ? 1.2 : 1.8+r*.25, trunk = new T.Mesh(new T.CylinderGeometry(.07,.11,trunkH,10), M.trunk);
       trunk.position.y = trunkH/2; trunk.castShadow = trunk.receiveShadow = true; trunk.userData.solid = true; grp.add(trunk);
       if(conifer){
@@ -5594,7 +5698,7 @@ function build3D(maxFloor, opts){
         return (walls||[]).some(w=>{ const dx=w.x2-w.x1, dy=w.y2-w.y1, l2=dx*dx+dy*dy||1, t=Math.max(0,Math.min(1,((px-w.x1)*dx+(py-w.y1)*dy)/l2));
           return Math.hypot(px-(w.x1+t*dx), py-(w.y1+t*dy)) < (w.thickness||20)/2+12; }); };
       // 一段栏杆：从 (xa,za) 到 (xb,zb)，底面高度 y；贴着 walls 里的墙就跳过。样式跟随楼梯的栏杆设置（上层围挡、双跑平台边都用它）
-      const gm = stairMat(o.stringerMat==='white'?'white':'black'), gh = o.handrail==='wood' ? FM.wood : gm;
+      const gm = o.rail==='gou' ? FM.wood : stairMat(o.stringerMat==='white'?'white':'black'), gh = (o.handrail==='wood' || o.rail==='gou') ? FM.wood : gm;
       const edge = (xa,za,xb,zb,y,walls,cover)=>{
         const rh=o.railH, L=Math.hypot(xb-xa,zb-za), mx=(xa+xb)/2, mz=(za+zb)/2, alongX = Math.abs(xb-xa)>=Math.abs(zb-za);
         if(o.rail==='none' || L<10 || wallNear(walls,mx,mz)) return;
@@ -5604,6 +5708,7 @@ function build3D(maxFloor, opts){
         }
         if(o.post!=='none') [[xa,za],[xb,zb]].forEach(([x,z])=> addS(gm,x,y+rh/2,z,3.5,rh,3.5,0,core,.6));
         if(o.rail==='glass'||o.rail==='solid') addS(o.rail==='glass'?FM.glassM:sm, mx,y+rh/2,mz, alongX?L:(o.rail==='glass'?1.2:5), rh-4, alongX?(o.rail==='glass'?1.2:5):L, 0, core,.3);
+        else if(o.rail==='gou'){ addS(FM.wood, mx,y+rh*.21,mz, alongX?L:2.6, rh*.38, alongX?2.6:L, 0, core,.3); addS(FM.wood, mx,y+2,mz, alongX?L:4.5, 4, alongX?4.5:L, 0, core,.3); [[xa,za],[xb,zb]].forEach(([x,z])=> addS(FM.wood,x,y+rh+2,z,6,4,6,0,core,.5)); }
         else if(o.rail==='bars') [.3,.62].forEach(f=> addS(gm,mx,y+rh*f,mz, alongX?L:1.6,1.6,alongX?1.6:L,0,core,.3));
         else { const cnt=Math.max(2,Math.floor(L/12)); for(let k=0;k<=cnt;k++) addS(gm, xa+(xb-xa)*k/cnt, y+(rh-3)/2, za+(zb-za)*k/cnt, 1.5, rh-3, 1.5, 0, core,.3); }
         if(o.handrail!=='none') addS(gh, mx,y+rh,mz, alongX?L:4.5,4.5,alongX?4.5:L,0,core,.4);
@@ -5614,8 +5719,8 @@ function build3D(maxFloor, opts){
       // 每个梯段有"内侧/外侧"：外侧=靠楼梯井一侧（站在梯段边缘会掉下去的那边），内侧=靠墙。railSide: outer 只装外侧 / both 两侧 / open 只装另一侧
       const hasRail = o.rail!=='none', hasHand = o.handrail!=='none';
       if(hasRail || hasHand){
-        const postW = o.post==='fat' ? 6.5 : o.post==='slim' ? 3.2 : 0, rh = o.railH, hm = stairMat(o.stringerMat==='white'?'white':'black');
-        const handM = o.handrail==='wood' ? FM.wood : stairMat(o.handrail==='flat'||o.handrail==='round' ? (o.stringerMat==='steel'?'steel':'black') : 'black');
+        const postW = o.rail==='gou' ? 6.5 : o.post==='fat' ? 6.5 : o.post==='slim' ? 3.2 : 0, rh = o.railH, hm = o.rail==='gou' ? FM.wood : stairMat(o.stringerMat==='white'?'white':'black');
+        const handM = (o.handrail==='wood' || o.rail==='gou') ? FM.wood : stairMat(o.handrail==='flat'||o.handrail==='round' ? (o.stringerMat==='steel'?'steel':'black') : 'black');
         const hT = o.handrail==='round' ? 4 : o.handrail==='flat' ? 6 : 5.5, hH = o.handrail==='round' ? 4 : o.handrail==='flat' ? 1.6 : 4.5;
         const which = o.railSide==='both' ? [true,false] : o.railSide==='open' ? [false] : [true];
         const runStairs = double ? [steps.slice(0,n), steps.slice(n)] : [steps];
@@ -5630,6 +5735,7 @@ function build3D(maxFloor, opts){
           // 立柱：起点、终点，中间每 ~4 级一根
           const posts = [0]; for(let i=3;i<pts.length-1;i+=3) posts.push(i); posts.push(pts.length-1);
           if(postW>0) posts.forEach(i=> addS(hm, pts[i].x, pts[i].y+rh/2, z, postW, rh, postW, 0, core, .6));
+          if(o.rail==='gou') posts.forEach(i=> addS(FM.wood, pts[i].x, pts[i].y+rh+3, z, 8, 8, 8, 0, core, .5));   // 望柱头
           const dx=xb-xa, dy=yb-ya, L=Math.hypot(dx,dy)||1, ang=Math.atan2(dy,dx);
           // 栏杆填充：沿坡度铺满 [xa,xb]，每根竖杆底在该 x 对应的踏面高度
           const yAt = x=> pts.reduce((best,pt)=> Math.abs(pt.x-x)<Math.abs(best.x-x) ? pt : best, pts[0]).y;
@@ -5640,6 +5746,10 @@ function build3D(maxFloor, opts){
             const m2=addS(hm, (xa+xb)/2, (ya+yb)/2+rh*.45, z, L, 1.6, 1.6, 0, core, .3); m2.rotation.z=ang;      // 中间一道斜横杆
           } else if(o.rail==='bars'){
             [.3,.62].forEach(f=>{ const m2=addS(hm, (xa+xb)/2, (ya+yb)/2+rh*f, z, L, 1.6, 1.6, 0, core, .3); m2.rotation.z=ang; });
+          } else if(o.rail==='gou'){   // 勾栏：地栿 + 下半截华板 + 板上一排小立柱（撮项）+ 寻杖（扶手，下面统一加）
+            const m2=addS(FM.wood,(xa+xb)/2,(ya+yb)/2+rh*.2,z,L,rh*.36,2.8,0,core,.3); m2.rotation.z=ang;
+            const m3=addS(FM.wood,(xa+xb)/2,(ya+yb)/2+2,z,L,4,4.5,0,core,.3); m3.rotation.z=ang;
+            const nb=Math.max(2,Math.floor(Math.abs(dx)/28)); for(let k=0;k<=nb;k++){ const x=xa+dx*k/nb; addS(FM.wood, x, yAt(x)+rh*.38+rh*.25, z, 2.2, rh*.5, 2.2, 0, core, .3); }
           } else if(o.rail==='glass'||o.rail==='solid'){
             const gm = o.rail==='glass' ? FM.glassM : sm, thick = o.rail==='glass'?1.2:5, off=o.rail==='glass'?0:0;
             // 玻璃/实心栏板：一块跟着坡度的整板（用梯形近似：沿斜率摆一块薄盒子，底边比踏面低一点）
@@ -5728,6 +5838,7 @@ async function ensureThree(){
     const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
     const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
     RBG = (await import('three/addons/geometries/RoundedBoxGeometry.js')).RoundedBoxGeometry;
+    try{ REFL = (await import('three/addons/objects/Reflector.js')).Reflector; }catch(_){ REFL = null; }
     const renderer = new lib.WebGLRenderer({antialias:true, preserveDrawingBuffer:true}); // preserveDrawingBuffer：截图要能读到画面
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
     renderer.toneMapping = lib.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;   // 电影级色调映射：亮部不死白、暗部有层次
@@ -6102,14 +6213,23 @@ window.addEventListener('keydown', (e)=>{   // 3D 里按 R 旋转选中的家具
 // 居室窗地比（窗洞面积÷房间面积，门窗归属按墙两侧各取一点落在哪个房间）、楼梯踏步舒适度、粗略造价（建筑面积×可填单价）。
 // 规范类阈值各地不同，这里只放一个参考值（窗地比 1/7，见佛山宅基地自建房技术指南），改下面常量即可。
 var mSig = '', mTimer = 0, mData = null;
-const M_FU_MAX = .2, M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
+const M_FU_MAX = .2, M_WALL_MIN = .6, M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
 function computeMetrics(){
   const sv = {state, roomsCache, roomsSig, roomsGridMeta}, warns = [];
   const floors = project.floors.map((f,fi)=>{
     state = f; detectRooms(fi);
     const gross = computeCoverRects(fi).reduce((s,r)=>s+r.w*r.h,0)/10000, rooms = roomsCache.map(r=>({area:r.areaM2, win:0, name:'', fu:0}));
     f.labels.forEach(l=>{ const i = roomIndexAt(l.x,l.y); if(i>=0 && !rooms[i].name) rooms[i].name = l.text; });
-    let winN = 0, doorN = 0, fuA = 0;
+    let winN = 0, doorN = 0, fuA = 0, wallA = 0, occA = 0; const HH = f.heightCm||300;
+    f.walls.forEach(w=>{ if(w.type!=='fence') wallA += 2*Math.hypot(w.x2-w.x1,w.y2-w.y1)*Math.min(w.heightCm||HH,HH)/10000; });   // 墙面总面积（两面）
+    f.openings.forEach(op=>{ const w = f.walls.find(x=>x.id===op.wallId); if(!w || w.type==='fence' || op.kind==='gate') return; occA += 2*op.width*openingDims(op).h/10000; });   // 门窗洞口（两面）
+    f.furniture.forEach(fu=>{ const def = FURNITURE_DEFS[fu.kind]||{}; if(def.icon==='car') return;   // 靠墙家具：按各自最近的墙，占墙面 = 沿墙长度 × 高度
+      const a = (fu.rot||0)*Math.PI/180, ex = (Math.abs(Math.cos(a))*fu.w+Math.abs(Math.sin(a))*fu.h)/2, ey = (Math.abs(Math.sin(a))*fu.w+Math.abs(Math.cos(a))*fu.h)/2, hz = Math.min(furnitureHeight(fu,HH)+furnitureElev(fu), HH); let best = null;
+      f.walls.forEach(w=>{ if(w.type==='fence') return; const hor = Math.abs(w.y2-w.y1)<1, ver = Math.abs(w.x2-w.x1)<1; if(!hor && !ver) return; const t = (w.thickness||12)/2;
+        const gap = (hor ? Math.min(Math.abs(fu.y-ey-w.y1), Math.abs(fu.y+ey-w.y1)) : Math.min(Math.abs(fu.x-ex-w.x1), Math.abs(fu.x+ex-w.x1))) - t;
+        const ov = hor ? Math.min(fu.x+ex, Math.max(w.x1,w.x2)) - Math.max(fu.x-ex, Math.min(w.x1,w.x2)) : Math.min(fu.y+ey, Math.max(w.y1,w.y2)) - Math.max(fu.y-ey, Math.min(w.y1,w.y2));
+        if(gap<=15 && ov>5 && (!best || gap<best.gap)) best = {gap, ov}; });
+      if(best) occA += best.ov*hz/10000; });
     f.furniture.forEach(fu=>{ const def = FURNITURE_DEFS[fu.kind]||{}; if(def.icon==='car' || furnitureElev(fu)>=100) return; const i = roomIndexAt(fu.x,fu.y); if(i>=0){ rooms[i].fu += fu.w*fu.h/10000; fuA += fu.w*fu.h/10000; } });   // 落地家具占地（不含车、吊柜）
     f.openings.forEach(op=>{
       if(op.kind==='door') doorN++;
@@ -6119,10 +6239,11 @@ function computeMetrics(){
       const dx = wl.x2-wl.x1, dy = wl.y2-wl.y1, L = Math.hypot(dx,dy)||1, x = wl.x1+dx*op.t, y = wl.y1+dy*op.t, off = (wl.thickness||12)/2+20, a = op.width*openingDims(op).h/10000;
       new Set([roomIndexAt(x-dy/L*off, y+dx/L*off), roomIndexAt(x+dy/L*off, y-dx/L*off)]).forEach(i=>{ if(i>=0) rooms[i].win += a; });   // 墙两侧各取一点
     });
+    if(project.style==='song' && wallA>0 && 1-occA/wallA<M_WALL_MIN) warns.push(`${f.name} 墙面留白 ${Math.round((1-occA/wallA)*100)}%（宋式建议 ≥60%；门窗+靠墙家具占了 ${Math.round(occA/wallA*100)}%）`);
     if(project.style==='song'){ const net = rooms.reduce((a,r)=>a+r.area,0); if(net>0 && fuA/net>M_FU_MAX) warns.push(`${f.name} 家具占地 ${Math.round(fuA/net*100)}%（宋式建议 ≤20%，留白为要）`); rooms.forEach(r=>{ if(r.name && r.area>0 && r.fu/r.area>M_FU_MAX) warns.push(`${f.name} ${r.name}：家具占地 ${Math.round(r.fu/r.area*100)}%（宋式建议 ≤20%）`); }); }
     rooms.forEach(r=>{ if(M_WIN_NEED.test(r.name) && r.win/r.area < M_WIN_MIN) warns.push(`${f.name} ${r.name}：窗地比 ${r.win>0 ? '1/'+(r.area/r.win).toFixed(1) : '无窗'}（建议 ≥1/7）`); });
     let stairWarn = 0; f.stairs.forEach(st=>{ const c = stairComfort(st, f.heightCm||300); if(c.warn.length){ stairWarn++; warns.push(`${f.name} 楼梯：${c.warn[0]}`); } });
-    return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN, fu:fuA, colN:(f.columns||[]).length};
+    return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN, fu:fuA, wallA, occA, colN:(f.columns||[]).length};
   });
   ({state, roomsCache, roomsSig, roomsGridMeta} = sv);
   return {floors, warns, gross:floors.reduce((s,f)=>s+f.gross,0), net:floors.reduce((s,f)=>s+f.net,0)};
@@ -6137,6 +6258,7 @@ function renderMetrics(){
     <table><tr><th>楼层</th><th>建面</th><th>净面积</th><th>房间</th><th>窗/门</th><th title="落地家具占地÷净面积；宋式建议≤20%">家具占地</th></tr>
       ${d.floors.map((f,i)=>`<tr data-f="${i}" class="${i===project.currentFloor?'cur':''}"><td>${esc(f.name)}</td><td>${f.gross.toFixed(1)}</td><td>${f.net.toFixed(1)}</td><td>${f.rooms.length}</td><td>${f.winN}/${f.doorN}</td><td>${f.net>0?Math.round(f.fu/f.net*100)+'%':'-'}</td></tr>`).join('')}
       <tr class="sum"><td>合计</td><td>${d.gross.toFixed(1)}</td><td>${d.net.toFixed(1)}</td><td>${d.floors.reduce((s,f)=>s+f.rooms.length,0)}</td><td>${d.floors.reduce((s,f)=>s+f.winN,0)}/${d.floors.reduce((s,f)=>s+f.doorN,0)}</td><td>${d.net>0?Math.round(d.floors.reduce((s,f)=>s+f.fu,0)/d.net*100)+'%':'-'}</td></tr></table>
+    <div class="mhrow" title="1 − (门窗洞口 + 靠墙家具)÷墙面总面积；两面都算，家具只算靠着的那一面">墙面留白 <b>${(()=>{ const w=d.floors.reduce((a,f)=>a+f.wallA,0), o=d.floors.reduce((a,f)=>a+f.occA,0); return w>0 ? Math.round((1-o/w)*100)+'%' : '-'; })()}</b>${d.floors.map(f=>f.wallA>0?` · ${esc(f.name)} ${Math.round((1-f.occA/f.wallA)*100)}%`:'').join('')} <span style="opacity:.6">宋式建议 ≥60%</span></div>
     <div class="mhrow">框架柱 <b>${d.floors.reduce((s,f)=>s+f.colN,0)}</b> 根${d.floors.map(f=>f.colN?` · ${esc(f.name)} ${f.colN}`:'').join('')}</div>
     <div class="mhrow">造价估算 <input type="number" id="mhUnit" min="0" step="100" value="${project.unitCost||''}" placeholder="单价"> 元/m²　${cost ? '≈ <b>'+(cost/10000).toFixed(1)+'</b> 万元' : '<span style="opacity:.6">填单价后显示</span>'}</div>
     ${cur && cur.rooms.some(r=>r.name) ? `<div class="mhsub">${esc(cur.name)} 房间 面积 / 窗地比 / 家具占地</div><table>${cur.rooms.filter(r=>r.name).map(r=>`<tr class="${M_WIN_NEED.test(r.name) && r.win/r.area<M_WIN_MIN?'bad':''}"><td>${esc(r.name)}</td><td>${r.area.toFixed(1)} m²</td><td>${r.win>0?'1/'+(r.area/r.win).toFixed(1):'无窗'}</td><td>${Math.round(r.fu/r.area*100)}%</td></tr>`).join('')}</table>` : ''}
@@ -6399,6 +6521,7 @@ function drawColumn(c, isSel){
   ctx.fillStyle = getCss('--wall-ext'); ctx.strokeStyle = isSel ? getCss('--accent') : '#111'; ctx.lineWidth = isSel ? 2 : 1;
   ctx.beginPath(); if(c.shape==='round') ctx.arc(0,0,w/2,0,Math.PI*2); else ctx.rect(-w/2,-d/2,w,d);
   ctx.fill(); ctx.stroke();
+  if(c.plinth){ ctx.save(); ctx.setLineDash([3,3]); ctx.strokeStyle = '#666'; ctx.lineWidth = 1; ctx.beginPath(); if(c.shape==='round') ctx.arc(0,0,w*.725,0,Math.PI*2); else ctx.rect(-w*.725,-d*.725,w*1.45,d*1.45); ctx.stroke(); ctx.restore(); }   // 柱础轮廓
   if(c.shape!=='round' && w>8 && d>8){ ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-w/2,-d/2); ctx.lineTo(w/2,d/2); ctx.moveTo(w/2,-d/2); ctx.lineTo(-w/2,d/2); ctx.stroke(); }   // 框架柱常用的对角线画法
   ctx.restore();
 }
@@ -6739,7 +6862,7 @@ window.houseDrone = {
   // 树种
   document.querySelectorAll('#popTree .mi').forEach(i=> i.addEventListener('click', ()=>{
     const sel=$('treeKindSelect'); sel.value=i.dataset.treekind; sel.dispatchEvent(new Event('change'));
-    document.querySelectorAll('#popTree .mi').forEach(x=> x.classList.toggle('on', x===i)); $('tbTree').querySelector('.tlabel').textContent = i.dataset.treekind==='conifer' ? '针叶树' : '树'; $('tbTree').click(); closeAll();
+    document.querySelectorAll('#popTree .mi').forEach(x=> x.classList.toggle('on', x===i)); $('tbTree').querySelector('.tlabel').textContent = ({deciduous:'树',conifer:'针叶树',pine:'松',bamboo:'竹',plantain:'芭蕉'})[i.dataset.treekind]||'树'; $('tbTree').click(); closeAll();
   }));
   // 窗型：先选后放
   const pw = $('popWindow');
