@@ -1958,15 +1958,11 @@ function hitTestAt(wx,wy,sx,sy){
       }
     }
   }
-  if(!hit){
-    for(const ar of state.areas){
-      if(wx>=ar.x1 && wx<=ar.x2 && wy>=ar.y1 && wy<=ar.y2){ hit={type:'area', id:ar.id, dragOffset:[wx,wy]}; break; }
-    }
-  }
-  if(!hit){
-    for(const rf of state.roofs){
-      if(wx>=rf.x1 && wx<=rf.x2 && wy>=rf.y1 && wy<=rf.y2){ hit={type:'roof', id:rf.id, dragOffset:[wx,wy]}; break; }
-    }
+  if(!hit){   // 地块和屋顶是两张大「底板」：谁的图层 z 更高（画在上面）就点中谁，而不是按数组顺序（以前总是先点中最早画的地面）
+    let best = null;
+    const test = (list,type)=> list.forEach(o=>{ if(wx>=Math.min(o.x1,o.x2) && wx<=Math.max(o.x1,o.x2) && wy>=Math.min(o.y1,o.y2) && wy<=Math.max(o.y1,o.y2) && (!best || (o.z||0)>=(best.o.z||0))) best = {o,type}; });
+    test(state.areas,'area'); test(state.roofs,'roof');
+    if(best) hit = {type:best.type, id:best.o.id, dragOffset:[wx,wy]};
   }
   return hit;
 }
@@ -2132,7 +2128,8 @@ mainCanvas.addEventListener('pointerdown', (e)=>{
   // 导致「露天」工具按下鼠标永远不开始画矩形（mouseup/move 都支持它，就入口进不去）
   if(isRectDragTool(currentTool)){
     const preHit = hitTestAt(wx,wy,sx,sy);
-    if(preHit && !(currentTool==='roof' && preHit.type==='roof')){ switchToSelectAndPick(preHit, wx, wy); return; }
+    // 圈「露天」优先级最高：起手点下面不管是墙端点、墙身还是别的元素，都直接开始拉框，不会被抢去选中别的东西
+    if(currentTool!=='area-open' && preHit && !(currentTool==='roof' && preHit.type==='roof')){ switchToSelectAndPick(preHit, wx, wy); return; }
     const [snx,sny] = snapPoint(wx,wy);
     drawState.active = true; drawState.x1=snx; drawState.y1=sny; drawState.x2=snx; drawState.y2=sny;
     drawState.type = currentTool;
