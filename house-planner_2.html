@@ -365,7 +365,7 @@
             <span class="vpopwrap"><button class="small" id="v3ViewMore">立面 ▾</button>
               <div class="vpop" id="v3ViewPop"><button class="small" data-view="n">北立面</button><button class="small" data-view="e">东立面</button><button class="small" data-view="s">南立面</button><button class="small" data-view="w">西立面</button></div></span>
           </span>
-          <label class="vgrp"><input type="checkbox" id="v3Explode"> 分层展开</label>
+          <label class="vgrp" title="展开视图：每层（含屋顶）沿竖直方向拉开，像剖视图；开启时显示整栋，「显示到」不起作用"><input type="checkbox" id="v3Explode"> 展开视图</label><input type="range" id="v3Gap" min="1" max="6" step=".5" value="2.5" style="width:72px;display:none" title="层间距（米）">
           <label class="vgrp" title="显示/隐藏邻居（配置保留在方案里）"><input type="checkbox" id="v3NbShow" checked> 邻居</label>
           <span class="vpopwrap"><button class="small" id="v3Nb" title="九宫格邻居：模拟周边建筑对采光/视野的影响">🏘 设置 ▾</button>
             <div class="vpop" id="v3NbPop"><label>巷宽 cm <input type="number" id="v3Alley" min="0" max="2000" step="10"></label>
@@ -4546,7 +4546,7 @@ const view3d = document.getElementById('view3d');
 let T = null, three = null; // T=THREE 命名空间；three={renderer,scene,camera,controls,sun,group,fit}
 let explode = false;        // 分层展开：各层沿竖直方向拉开
 let sunAz = 120, sunEl = 50; // 日照方位角（0=北，顺时针）和高度角，由圆环旋钮驱动
-const EXPLODE_GAP = 2.5;    // 米，展开时相邻楼层额外拉开的距离
+let EXPLODE_GAP = 2.5;    // 米，展开时相邻楼层额外拉开的距离
 // 围栏样式 wl.fenceStyle（只对 type==='fence'）：solid 实心(旧工程默认) / picket 竖栅栏 / iron 铁艺栏杆 / half 下实上虚 / lattice 花格漏窗墙
 // 参数（都可选，缺省取样式默认值）：fenceH 总高、fenceGap 栅条净间距、fenceBase 实心基座高（half 的矮墙/iron、picket 的底梁）、fenceColor 颜色键
 const FENCE_STYLES = {
@@ -5556,7 +5556,8 @@ function build3D(maxFloor, opts){
         else { const m = new T.Mesh(cylGeo, M.col); m.scale.set(c.w/100, h0/100, c.w/100); m.position.set(c.x/100,(base+pH+h0/2)/100,c.y/100); solid_(m); }
       } else add(M.col, c.x, base+pH+h0/2, c.y, c.w, h0, d, rotc, cur);
     });
-    eachSrc(f.roofs||[],'roof',rf=> roofItem(cur, rf, base+H+(rf.lift||0), {tile:M.tile, flat:M.roof, ext:M.ext, wood:FM.wood}, (m,cx,cy,cz,sx,sy,sz)=>add(m,cx,cy,cz,sx,sy,sz,0,cur)));
+    eachSrc(f.roofs||[],'roof',rf=>{ const rg = new T.Group(); rg.userData.roofLift = true; cur.add(rg);   // 每个屋顶自己一个组：展开视图里屋顶要和下面的墙再拉开一段
+      roofItem(rg, rf, base+H+(rf.lift||0), {tile:M.tile, flat:M.roof, ext:M.ext, wood:FM.wood}, (m,cx,cy,cz,sx,sy,sz)=>add(m,cx,cy,cz,sx,sy,sz,0,rg)); });
     eachSrc(f.trees,'tree',tr=>{
       const r = tr.r/100, conifer = tr.kind==='conifer', grp = new T.Group();
       grp.position.set(tr.x/100, (base+floorY(tr.x,tr.y))/100, tr.y/100); cur.add(grp);
@@ -5910,7 +5911,7 @@ function fit3D(){
 }
 // 视角预设：iso=透视俯瞰，top=正俯视，n/e/s/w=从北/东/南/西看的立面（相机在半高处平视）
 function setView(name){
-  const {cx,cz,size,totalH} = three.fit, dist = size*1.7+totalH, ty = totalH/2;
+  const {cx,cz,size} = three.fit, totalH = three.fit.totalH + (explode ? EXPLODE_GAP*(project.floors.length-1+.75) : 0), dist = size*1.7+totalH, ty = totalH/2;
   const P = {
     iso:[cx+size*.9, totalH+size*.8, cz+size*.9, cx,ty,cz],
     top:[cx, totalH+size*1.8+5, cz+.01, cx,0,cz],
@@ -5932,15 +5933,44 @@ function applySun(){
   sun.shadow.camera.updateProjectionMatrix(); draw3D();
 }
 // 分层展开：每层沿竖直方向多拉开一段，方便看清每一层
+// 展开视图（剖视感）：每层沿竖直方向拉开 EXPLODE_GAP，屋顶再多抬 .75 个间距（和下面的墙脱开）；楼层名牌 + 四角竖向参考线（只画层与层之间的空隙，看上下层怎么对位）
+function exLabel(text){
+  const c = document.createElement('canvas'); c.width = 256; c.height = 80; const g = c.getContext('2d');
+  g.font = '600 38px -apple-system, "PingFang SC", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = Math.min(244, g.measureText(text).width+40); g.fillStyle = 'rgba(255,255,255,.92)'; g.strokeStyle = 'rgba(71,85,105,.55)'; g.lineWidth = 3;
+  g.beginPath(); g.roundRect ? g.roundRect((256-w)/2,12,w,56,14) : g.rect((256-w)/2,12,w,56); g.fill(); g.stroke(); g.fillStyle = '#334155'; g.fillText(text,128,41);
+  const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace;
+  const sp = new T.Sprite(new T.SpriteMaterial({map:tex, depthTest:false, transparent:true, fog:false})); sp.geometry.userData.shared = true;
+  sp.scale.set(4.2,1.31,1); sp.renderOrder = 1000; sp.userData.noPick = true; return sp;
+}
 function applyExplode(){
   if(!three || !three.group) return;
-  (three.group.userData.floors||[]).forEach((fg,i)=>{ fg.position.y = explode && !drone.on ? i*EXPLODE_GAP : 0; });
+  const on = explode && !drone.on, G = three.group, fl = G.userData.floors||[];
+  (G.userData.exExtras||[]).forEach(o=>{ if(o.parent) o.parent.remove(o); [].concat(o.material||[]).forEach(m=>{ if(m.map) m.map.dispose(); m.dispose(); }); if(o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); });
+  G.userData.exExtras = [];
+  fl.forEach((fg,i)=>{ fg.position.y = on ? i*EXPLODE_GAP : 0; fg.children.forEach(c=>{ if(c.userData.roofLift) c.position.y = on ? EXPLODE_GAP*.75 : 0; }); });
+  if(on){
+    const bb = mainBbox(), extras = G.userData.exExtras;
+    if(bb){
+      const lx = bb.x1/100-2.6, lz = (bb.y1+bb.y2)/200; let acc = 0, hasRoofTop = false;
+      fl.forEach((fg,i)=>{
+        const H = (project.floors[i].heightCm||300)/100; const sp = exLabel(project.floors[i].name||('第'+(i+1)+'层')); sp.position.set(lx, acc+H*.5, lz); fg.add(sp); extras.push(sp);
+        const rg = fg.children.find(c=>c.userData.roofLift); if(rg){ const rs = exLabel('屋顶'); rs.scale.set(2.8,.88,1); rs.position.set(lx, acc+H+.55, lz); rg.add(rs); extras.push(rs); }
+        acc += H;
+      });
+      // 四角竖向参考线：每段 = 某层顶 → 上一层底（含最上层顶 → 屋顶）
+      const pts = [], cs = [[bb.x1,bb.y1],[bb.x2,bb.y1],[bb.x1,bb.y2],[bb.x2,bb.y2]]; let y0 = 0;
+      fl.forEach((fg,i)=>{ const H = (project.floors[i].heightCm||300)/100, top = y0+H+i*EXPLODE_GAP, nxt = i<fl.length-1 ? top+EXPLODE_GAP : top+EXPLODE_GAP*.75; cs.forEach(([x,z])=> pts.push(x/100,top,z/100, x/100,nxt,z/100)); y0 += H; });
+      const gm = new T.BufferGeometry(); gm.setAttribute('position', new T.Float32BufferAttribute(pts,3));
+      const ln = new T.LineSegments(gm, new T.LineBasicMaterial({color:0x475569, transparent:true, opacity:.75, depthTest:false})); ln.renderOrder = 900; ln.userData.noPick = true; G.add(ln); extras.push(ln);
+    }
+  }
   draw3D();
 }
 function rebuild3D(){
   e3sig = JSON.stringify([project.floors, project.roof, project.currentFloor]);
   if(three.group){ three.scene.remove(three.group); disposeGroup(three.group); }
-  three.group = build3D(drone.on ? project.floors.length-1 : (v3Pin ?? project.currentFloor), {shadowCasters:!drone.on});   // 无人机模式永远显示整栋
+  three.group = build3D((drone.on || explode) ? project.floors.length-1 : (v3Pin ?? project.currentFloor), {shadowCasters:!(drone.on || explode)});   // 无人机/展开视图：永远显示整栋   // 无人机模式永远显示整栋
   three.scene.add(three.group); applyExplode(); applySun();
   if(drone.on) droneBuildColliders();
   if(editMode) updateOverlay();
@@ -5994,7 +6024,7 @@ function syncView3D(){
   if(!three || view3d.hidden) return;
   document.getElementById('v3NbShow').checked = nbCfg().show;
   document.getElementById('v3Style').value = project.style==='song' ? 'song' : 'modern';
-  const sel = document.getElementById('v3Floor');
+  const sel = document.getElementById('v3Floor'); sel.disabled = explode;
   sel.innerHTML = project.floors.map((f,i)=>`<option value="${i}">${esc(f.name)}</option>`).join('');
   sel.value = v3Pin ?? project.currentFloor;
   rebuild3D();
@@ -6017,7 +6047,11 @@ document.getElementById('v3Floor').onchange = (e)=>{ switchFloor(+e.target.value
 document.querySelectorAll('#view3dBar [data-view]').forEach(b=> b.onclick = ()=>{ setView(b.dataset.view); document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
 ['v3ViewMore','v3Nb'].forEach(id=>{ const b=document.getElementById(id); b.onclick=(e)=>{ e.stopPropagation(); const w=b.closest('.vpopwrap'), was=w.classList.contains('open'); document.querySelectorAll('.vpopwrap.open').forEach(x=>x.classList.remove('open')); if(!was) w.classList.add('open'); }; });
 document.addEventListener('pointerdown', e=>{ if(!e.target.closest('.vpopwrap')) document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
-document.getElementById('v3Explode').onchange = (e)=>{ explode = e.target.checked; applyExplode(); };
+function exCamShift(sign){   // 展开/收起后整体变高变矮：相机和注视点一起上下挪半个增量，画面大致保持原来的取景
+  if(!three || !three.fit) return; const d = sign*EXPLODE_GAP*(project.floors.length-1+.75)/2; three.camera.position.y += d; three.controls.target.y += d; three.controls.update();
+}
+document.getElementById('v3Explode').onchange = (e)=>{ explode = e.target.checked; const gp = document.getElementById('v3Gap'); gp.style.display = explode ? '' : 'none'; document.getElementById('v3Floor').disabled = explode; if(!drone.on) exCamShift(explode ? 1 : -1); rebuild3D(); };
+document.getElementById('v3Gap').oninput = (e)=>{ EXPLODE_GAP = +e.target.value; applyExplode(); };
 
 // ---- 3D 直接编辑 ----
 // 思路：3D 只是 2D 数据生成的结果，所以不另写一套编辑逻辑——3D 里的鼠标位置换算成 2D 世界坐标，
