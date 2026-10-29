@@ -523,6 +523,8 @@ const FURNITURE_DEFS = {
   'coffee-table':  {label:'茶几',       w:110, h:55,  icon:'plain', hz:45, legs:true},
   'tv-stand':      {label:'电视柜',     w:160, h:40,  icon:'plain', hz:50},
   'dining-table-4':{label:'餐桌(4人)',  w:130, h:80,  icon:'table', hz:75},
+  'dining-round-6':{label:'圆餐桌套装（6人，含餐椅）', w:170, h:170, icon:'roundset', hz:75, round:true, seats:6},
+  'dining-round-8':{label:'圆餐桌套装（8人，含餐椅）', w:210, h:210, icon:'roundset', hz:75, round:true, seats:8},
   'dining-chair':  {label:'餐椅',       w:45,  h:45,  icon:'chair', hz:90},
   'bench':         {label:'长凳',       w:120, h:35,  icon:'plain', hz:45, legs:true},
   'cabinet-low':   {label:'矮柜',       w:100, h:40,  icon:'cabinet', hz:60},
@@ -567,7 +569,7 @@ const FURNITURE_DEFS = {
   'car-suv':       {label:'SUV',        w:190, h:480, icon:'car', hz:175, cab:[.64,-.10]}
 };
 const FURNITURE_CATS = [
-  {label:'客厅/餐厅', items:['sofa-3','sofa-1','coffee-table','tv-stand','dining-table-4','dining-chair','bench']},
+  {label:'客厅/餐厅', items:['sofa-3','sofa-1','coffee-table','tv-stand','dining-table-4','dining-round-6','dining-round-8','dining-chair','bench']},
   {label:'储物柜', items:['cabinet-low','sideboard','shoe-cabinet','bookshelf','bar-counter','wardrobe','wardrobe-full']},
   {label:'卧室', items:['bed-double','bed-single','nightstand','desk','vanity']},
   {label:'厨房', items:['stove','kitchen-sink','fridge','kitchen-cabinet','wall-cabinet','washer']},
@@ -1638,7 +1640,7 @@ function drawFurniture(fu, isSel){
   ctx.lineWidth = isSel ? 2 : 1.5;
   if(def.round){ ctx.beginPath(); ctx.ellipse(0,0,w/2,h/2,0,0,Math.PI*2); } else roundRectPath(ctx, -w/2, -h/2, w, h, def.icon==='car' ? Math.min(w*0.22,h*0.1) : Math.min(6, w*0.1, h*0.1));
   ctx.fill(); ctx.stroke();
-  drawFurnitureIcon(def.icon, w, h, def);
+  drawFurnitureIcon(def.icon, w, h, def, fu);
   ctx.restore();
   // 画布上不再自动显示"书桌""沙发"这类型号文字——那是模型层面的东西，用户实际想表达的
   // 可能是别的（比如拿书桌的模型摆一个吧台），所以只画用户自己起的名字，不设置就什么都不画。
@@ -1652,7 +1654,7 @@ function drawFurniture(fu, isSel){
 }
 // 在已经 translate+rotate 到家具中心的坐标系里画一些简单的示意细节，帮助区分家具种类。
 // (0,0) 是家具中心，w/h 是屏幕像素下的整体宽高。
-function drawFurnitureIcon(icon, w, h, def){
+function drawFurnitureIcon(icon, w, h, def, fu){
   const c = ctx;
   c.strokeStyle = getCss('--furniture-detail');
   c.fillStyle = getCss('--furniture-detail');
@@ -1679,6 +1681,10 @@ function drawFurnitureIcon(icon, w, h, def){
     }
   } else if(icon==='chair'){
     c.beginPath(); c.moveTo(-hw*0.7, -hh); c.lineTo(hw*0.7, -hh); c.stroke();
+  } else if(icon==='roundset' && fu){   // 圆桌 + 一圈小方块椅子（朝向圆心）
+    const {D,n,Rc,Rt} = roundSetDims(fu), k = w/D, cs = 40*k;
+    c.beginPath(); c.arc(0,0,Rt*k,0,Math.PI*2); c.stroke(); c.beginPath(); c.arc(0,0,Math.max(1.5,Rt*k*.12),0,Math.PI*2); c.stroke();
+    for(let i=0;i<n;i++){ const a = Math.PI*2*i/n + Math.PI/2; c.save(); c.translate(Rc*k*Math.cos(a), Rc*k*Math.sin(a)); c.rotate(a-Math.PI/2); roundRectPath(c,-cs/2,-cs/2,cs,cs,cs*.25); c.fillStyle = getCss('--furniture-fill'); c.fill(); c.stroke(); c.beginPath(); c.moveTo(-cs*.4,cs*.5); c.lineTo(cs*.4,cs*.5); c.lineWidth = 2; c.stroke(); c.restore(); }
   } else if(icon==='table'){
     c.beginPath(); c.arc(0,0, Math.min(hw,hh)*0.15, 0, Math.PI*2); c.stroke();
   } else if(icon==='wardrobe'){
@@ -2914,7 +2920,7 @@ function pasteClipboard(useMouse){
       state.labels.push(nl); newSel.push({type:'label', id:nl.id});
     } else if(c.type==='furniture'){
       const f = c.data;
-      const nf = {id:newId(), x:f.x+OFFSET, y:f.y+OFFSET, w:f.w, h:f.h, rot:f.rot||0, kind:f.kind, name:f.name, hz:f.hz, elev:f.elev, z:nextLayerZ()};
+      const nf = {id:newId(), x:f.x+OFFSET, y:f.y+OFFSET, w:f.w, h:f.h, rot:f.rot||0, kind:f.kind, name:f.name, hz:f.hz, elev:f.elev, seats:f.seats, z:nextLayerZ()};
       state.furniture.push(nf); newSel.push({type:'furniture', id:nf.id});
     } else if(c.type==='person'){
       const q = c.data;
@@ -3754,10 +3760,13 @@ function showPanel(){
         <select id="fuKind">${FURNITURE_CATS.map(cat=>`<optgroup label="${cat.label}">${cat.items.map(k=>`<option value="${k}" ${fu.kind===k?'selected':''}>${FURNITURE_DEFS[k].label}</option>`).join('')}</optgroup>`).join('')}</select>
       </div>
       <div class="field"><label>名称（可选，显示在画布上）</label><input type="text" id="fuName" value="${esc(fu.name)}" placeholder="不填则不显示文字，比如可以填“吧台”"></div>
-      <div class="row2">
+      ${def.icon==='roundset' ? `<div class="row2">
+        <div class="field"><label>整体直径 (cm，含椅子)</label><input type="number" id="fuW" value="${fu.w.toFixed(0)}" min="100"></div>
+        <div class="field"><label>椅子数量</label><input type="number" id="fuSeats" value="${roundSetDims(fu).n}" min="3" max="12"></div>
+      </div>` : `<div class="row2">
         <div class="field"><label>宽 (cm)</label><input type="number" id="fuW" value="${fu.w.toFixed(0)}" min="10"></div>
         <div class="field"><label>深 (cm)</label><input type="number" id="fuH" value="${fu.h.toFixed(0)}" min="10"></div>
-      </div>
+      </div>`}
       <div class="row2">
         <div class="field"><label>高度 (cm)</label><input type="number" id="fuHz" value="${furnitureHeight(fu,state.heightCm||300).toFixed(0)}" min="5" max="600"></div>
         <div class="field"><label>离地 (cm)</label><input type="number" id="fuElev" value="${furnitureElev(fu).toFixed(0)}" min="0" max="500"></div>
@@ -3777,8 +3786,9 @@ function showPanel(){
     document.getElementById('fuElev').onchange = (e)=>{ pushHistory(); fu.elev=Math.max(0,+e.target.value||0); };
     document.getElementById('fuHFull').onclick = ()=>{ pushHistory(); fu.hz=Math.max(5,(state.heightCm||300)-furnitureElev(fu)); showPanel(); };
     document.getElementById('fuName').onchange = (e)=>{ pushHistory(); fu.name = e.target.value.trim(); render(); };
-    document.getElementById('fuW').onchange = (e)=>{ pushHistory(); fu.w=Math.max(10,+e.target.value||fu.w); render(); };
-    document.getElementById('fuH').onchange = (e)=>{ pushHistory(); fu.h=Math.max(10,+e.target.value||fu.h); render(); };
+    document.getElementById('fuW').onchange = (e)=>{ pushHistory(); fu.w=Math.max(10,+e.target.value||fu.w); if(def.icon==='roundset') fu.h = fu.w; render(); };
+    if(document.getElementById('fuSeats')) document.getElementById('fuSeats').onchange = (e)=>{ pushHistory(); fu.seats = Math.max(3,Math.min(12,Math.round(+e.target.value||6))); render(); };
+    if(document.getElementById('fuH')) document.getElementById('fuH').onchange = (e)=>{ pushHistory(); fu.h=Math.max(10,+e.target.value||fu.h); render(); };
     document.getElementById('fuRot').onchange = (e)=>{ pushHistory(); fu.rot=(((+e.target.value||0)%360)+360)%360; render(); };
     document.getElementById('fuRot90').onclick = ()=>{ pushHistory(); fu.rot=(((fu.rot||0)+90)%360+360)%360; showPanel(); render(); };
     document.getElementById('fuX').onchange = (e)=>{ pushHistory(); fu.x=+e.target.value||0; render(); };
@@ -4089,7 +4099,7 @@ function describeFurnitureLine(fu, floorH){
   const displayName = (fu.name||'').trim() || def.label;
   // displayName 是用户自定义的名字（没填就用模型名兜底），"模型"这一项则始终标出真实用的是哪个家具模型——
   // 两者可能不一样（比如拿书桌模型摆的吧台），这样下游不管是看名字还是看形状描述都对得上。
-  return `家具「${displayName}」（模型：${def.label}，尺寸 ${fu.w.toFixed(0)}×${fu.h.toFixed(0)}cm，高 ${furnitureHeight(fu,floorH).toFixed(0)}cm${furnitureElev(fu)>0?`，离地 ${furnitureElev(fu).toFixed(0)}cm`:''}，朝向 ${Math.round(fu.rot||0)}°，中心坐标 (${fu.x.toFixed(0)}, ${fu.y.toFixed(0)})）`;
+  return `家具「${displayName}」（模型：${def.label}${def.icon==='roundset' ? '，'+roundSetDims(fu).n+' 把餐椅环绕' : ''}，尺寸 ${fu.w.toFixed(0)}×${fu.h.toFixed(0)}cm，高 ${furnitureHeight(fu,floorH).toFixed(0)}cm${furnitureElev(fu)>0?`，离地 ${furnitureElev(fu).toFixed(0)}cm`:''}，朝向 ${Math.round(fu.rot||0)}°，中心坐标 (${fu.x.toFixed(0)}, ${fu.y.toFixed(0)})）`;
 }
 function describeTreeLine(tr){
   return `树木（${({conifer:'针叶（塔形）',pine:'松',bamboo:'竹丛',plantain:'芭蕉'})[tr.kind]||'阔叶（圆冠）'}，冠幅约 ${(tr.r*2).toFixed(0)}cm，位置 (${tr.x.toFixed(0)}, ${tr.y.toFixed(0)})）`;
@@ -4755,6 +4765,10 @@ function buildSlopeRoof(parent, rects, yBase, rc, material, gableMat){
 // 每项：[材质键, x, y底, z, sx, 高, sz, 形状?, 选项?]。形状：缺省=圆角盒；'cyl'=竖直圆柱；'cylx'=沿 x 的圆柱(车轮)；'cylz'=沿 z 的圆柱；
 // 'sph'=椭球；'soft'=软包(枕头/坐垫)；'duvet'=被子/搭毯(褶皱曲面)；'sharp'=不倒角的盒(接缝线)。
 // 选项 o：{rx,ry,rz 旋转(弧度)}，被子另有 mw(床垫宽)/dropS(侧垂)/dropF(脚端垂)/amp(褶皱幅度)。H 是这件家具的总高度。
+function roundSetDims(fu){   // 圆餐桌套装：footprint 直径 D = fu.w；椅子中心在 Rc，桌面半径 Rt（椅子前沿缩进桌下约 8cm）
+  const def = FURNITURE_DEFS[fu.kind]||{}, D = Math.max(100, fu.w), n = Math.max(3, Math.min(12, Math.round(fu.seats||def.seats||6))), Rc = D/2-22.5;
+  return {D, n, Rc, Rt: Math.max(25, Rc-14)};
+}
 function furnitureParts(fu, H){
   const w=fu.w, d=fu.h, def=FURNITURE_DEFS[fu.kind]||{}, icon=def.icon||'plain', P=[];
   const bx=(m,x,y,z,sx,hh,sz,o)=>P.push([m,x,y,z,sx,hh,sz,undefined,o]);
@@ -4766,6 +4780,16 @@ function furnitureParts(fu, H){
     if(w>=70){ sharp('seam',0,2,d/2+.05,.5,H-4,.4); bx('brass',-3.6,hy,d/2+1,1.2,len,1.5); bx('brass',3.6,hy,d/2+1,1.2,len,1.5); }
     else bx('brass',w/2-6,hy,d/2+1,1.2,len,1.5);
   };
+  if(icon==='roundset'){   // 圆桌 + 一圈餐椅：椅子直接复用单把餐椅的部件，绕桌心旋转摆放，椅背朝外
+    const {n,Rc,Rt} = roundSetDims(fu), cp = furnitureParts({kind:'dining-chair', w:45, h:45, id:fu.id}, 90);
+    cy('wood',0,H-4,0,Rt*2,4,Rt*2); cy('wood',0,3,0,12,H-7,12); cy('wood',0,0,0,Math.min(44,Rt*.9),3,Math.min(44,Rt*.9));   // 桌面 + 中柱 + 底座
+    cy('white',0,H,0,10,18,10); sp('leafy',0,H+12,0,24,22,24);                                                         // 花瓶 + 绿枝
+    for(let i=0;i<n;i++){
+      const a = Math.PI*2*i/n + Math.PI/2, th = Math.atan2(-Math.cos(a), -Math.sin(a)), c = Math.cos(th), sn = Math.sin(th), cx = Rc*Math.cos(a), cz = Rc*Math.sin(a);
+      cp.forEach(([m,x,y,z,sx,hh,sz,shape,o])=> P.push([m, cx+x*c+z*sn, y, cz-x*sn+z*c, sx,hh,sz, shape, Object.assign({}, o, {ry:(o&&o.ry||0)+th})]));
+    }
+    return P;
+  }
   if(icon==='car'){
     const [cl,co] = def.cab||[.5,-.06], cabL = d*cl, cabZ = d*co, belt = H*.62, D = Math.min(70,H*.45);
     bx('carbody',0,14,0,w,belt-14,d);                                                      // 下车身
