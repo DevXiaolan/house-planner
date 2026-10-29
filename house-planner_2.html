@@ -2732,7 +2732,7 @@ window.addEventListener('keydown', (e)=>{
   }
   if((e.ctrlKey||e.metaKey) && e.key==='z' && !inInput){ undo(); }
   if((e.ctrlKey||e.metaKey) && e.key==='c' && !inInput){ e.preventDefault(); copySelection(); }
-  if((e.ctrlKey||e.metaKey) && e.key==='v' && !inInput){ e.preventDefault(); pasteClipboard(); }
+  if((e.ctrlKey||e.metaKey) && e.key==='v' && !inInput){ e.preventDefault(); pasteClipboard(true); }
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) && !inInput && (selection || multiSelection.length>0)){
     e.preventDefault();
     const step = e.shiftKey ? 10 : 1; // cm；按住 Shift 加大步长，方便快速挪动
@@ -2839,9 +2839,34 @@ function copySelection(){
   }).filter(Boolean);
   showToast(`已复制 ${clipboard.length} 个元素（Ctrl/Cmd+V 粘贴）`);
 }
-function pasteClipboard(){
+// 只复制了门窗时：粘贴到【鼠标指向的那面墙】、鼠标位置处（不在任何墙附近时，退回到当前选中的墙中点；再不行才回到原墙）。尺寸、窗型、离地高等全部保留
+function pasteOpeningsToWall(mouse){
+  if(!clipboard.length || !clipboard.every(c=>c.type==='opening')) return false;
+  let wl = null, wx = 0, wy = 0;
+  const inCanvas = mouse && lastMouse.x>=0 && lastMouse.y>=0 && lastMouse.x<=mainCanvas.clientWidth && lastMouse.y<=mainCanvas.clientHeight;
+  if(inCanvas){ [wx,wy] = screenToWorld(lastMouse.x,lastMouse.y); wl = findWallNear(wx,wy, 40/view.scale); }
+  let t0 = null;
+  if(wl) t0 = paramOnWall(wl,wx,wy);
+  else if(selection && selection.type==='wall'){ wl = state.walls.find(w=>w.id===selection.id) || null; t0 = .5; }
+  if(!wl) return false;
+  const len = Math.hypot(wl.x2-wl.x1, wl.y2-wl.y1) || 1, fence = wl.type==='fence', newSel = []; let cursor = t0*len;
+  clipboard.forEach((c,i)=>{
+    const op = c.data, half = op.width/2;
+    if(i>0) cursor += half + 10;   // 多个门窗依次排开，间隔 10cm
+    const t = Math.min(1-half/len, Math.max(half/len, cursor/len));
+    const kind = op.kind==='window' ? 'window' : (fence ? 'gate' : 'door');   // 门贴到围栏上自动成为院门，反之亦然
+    const nop = {id:newId(), wallId:wl.id, t:Math.min(.98,Math.max(.02,t)), width:op.width, kind, hinge:op.hinge||0, swing:op.swing||1, sill:op.sill, h:op.h, style:op.style};
+    state.openings.push(nop); newSel.push({type:'opening', id:nop.id});
+    cursor += half;
+  });
+  if(newSel.length===1){ selection = newSel[0]; multiSelection = []; } else { selection = null; multiSelection = newSel; }
+  render(); showPanel(); showToast(`已粘贴 ${newSel.length} 个门窗到这面墙`);
+  return true;
+}
+function pasteClipboard(useMouse){
   if(clipboard.length===0){ showToast('剪贴板是空的，先复制一些元素'); return; }
   pushHistory();
+  if(pasteOpeningsToWall(useMouse===true)) return;
   const OFFSET = 30; // cm，粘贴时整体偏移一点，避免和原件完全重叠分不清
   const wallIdMap = {};
   const newSel = [];
@@ -3042,7 +3067,7 @@ document.getElementById('btnSpreadView').onclick = ()=>{
 };
 document.getElementById('btnUndo').onclick = undo;
 document.getElementById('btnCopy').onclick = copySelection;
-document.getElementById('btnPaste').onclick = pasteClipboard;
+document.getElementById('btnPaste').onclick = ()=> pasteClipboard(false);   // 按钮粘贴：鼠标不在画布上，用选中的墙或原墙
 document.getElementById('btnDelete').onclick = deleteSelection;
 document.getElementById('btnClear').onclick = ()=>{
   showConfirm(`确定清空"${esc(project.floors[project.currentFloor].name)}"这一层吗？此操作不可撤销。`).then(ok=>{
