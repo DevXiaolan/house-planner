@@ -158,6 +158,7 @@
   .furniture-picker button.fitem .fdim{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap;}
   #view3d{position:absolute;inset:0;z-index:50;background:#dfe9f3;}
   #view3dBar{position:absolute;top:8px;left:8px;z-index:2;display:flex;flex-wrap:nowrap;align-items:center;max-width:calc(100% - 16px);gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text);}
+  #boqCard{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:62;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);padding:12px 14px;font-size:12px;color:var(--text);width:560px;max-width:94%;max-height:86%;overflow-y:auto;} #boqCard .bqt{width:100%;border-collapse:collapse;} #boqCard th{font-weight:500;color:var(--muted);text-align:right;padding:3px 6px;border-bottom:1px solid var(--border);} #boqCard td{padding:3px 6px;text-align:right;border-bottom:1px solid var(--hover-bg);} #boqCard th:first-child,#boqCard td:first-child{text-align:left;} #boqCard td input{width:70px;text-align:right;padding:2px 4px;} #boqCard td input.cu{color:var(--accent);font-weight:600;} #boqCard .bqw{opacity:.55;font-size:11px;} #boqCard tr.sum td{font-weight:700;border-top:2px solid var(--border);}
   #tidyCard{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:61;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.22);padding:10px 14px;font-size:12px;color:var(--text);width:340px;max-width:90%;} #tidyCard .tcrow{margin:8px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;} #tidyCard .tclist{margin:8px 0;line-height:1.8;} #tidyCard .tdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;}
   #metricsHud{position:absolute;right:12px;bottom:12px;z-index:60;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);font-size:12px;color:var(--text);max-width:340px;}
   #mhHead{display:block;width:100%;padding:7px 12px;border:none;background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:left;border-radius:10px;white-space:nowrap;}
@@ -278,6 +279,7 @@
         <button id="btnDelete" class="mi"><span class="ml">删除选中</span><span class="mk">Del</span></button>
         <div class="msep"></div>
         <button id="btnGrid" class="mi"><span class="ml">轴网…</span><span class="mk">柱网定位</span></button>
+        <button id="btnBoq" class="mi"><span class="ml">工程量与造价…</span><span class="mk">分项清单</span></button>
         <button id="btnTidy" class="mi"><span class="ml">整理墙体…</span><span class="mk">对齐接缝</span></button>
         <button id="btnClear" class="mi danger"><span class="ml">清空当前楼层…</span></button>
       </div></div>
@@ -352,6 +354,7 @@
   <main>
     <div id="canvasWrap">
       <div id="tidyCard" hidden></div>
+      <div id="boqCard" hidden></div>
       <div id="metricsHud"><button id="mhHead" title="实时指标：面积、窗地比、楼梯舒适度、造价估算"></button><div id="mhBody" hidden></div></div>
       <canvas id="gridCanvas"></canvas>
       <canvas id="mainCanvas"></canvas>
@@ -554,6 +557,19 @@ const FURNITURE_DEFS = {
   'stone-table':   {label:'圆石桌',     w:80,  h:80,  icon:'stone', hz:75, round:true},
   'stone-stool':   {label:'石鼓凳',     w:36,  h:36,  icon:'stone', hz:45, round:true},
   'stone-bench':   {label:'石长凳',     w:140, h:38,  icon:'stone', hz:45},
+  // 家电与日常家居
+  'ac-floor':     {label:'柜机空调',   w:50,  h:38,  icon:'acfloor', hz:178},
+  'ac-wall':      {label:'挂机空调',   w:90,  h:25,  icon:'acwall', hz:30, elev:220},
+  'dishwasher':   {label:'洗碗机',     w:60,  h:60,  icon:'dishwasher', hz:85},
+  'dryer':        {label:'烘干机',     w:60,  h:60,  icon:'dryer', hz:85},
+  'purifier':     {label:'空气净化器', w:40,  h:30,  icon:'purifier', hz:65},
+  'tv-wall':      {label:'壁挂电视（65寸）', w:145, h:8, icon:'tvwall', hz:84, elev:55},
+  'piano':        {label:'立式钢琴',   w:150, h:60,  icon:'piano', hz:120},
+  'beanbag':      {label:'懒人沙发',   w:80,  h:80,  icon:'beanbag', hz:55, round:true},
+  'treadmill':    {label:'跑步机',     w:80,  h:180, icon:'treadmill', hz:135},
+  'rug':          {label:'地毯',       w:240, h:170, icon:'rug', hz:2},
+  'floor-lamp':   {label:'落地灯',     w:40,  h:40,  icon:'floorlamp2', hz:160, round:true},
+  'plant':        {label:'绿植（盆栽）', w:50, h:50, icon:'plant', hz:120, round:true},
   // 宋式：线条简洁，素木本色
   'song-armchair': {label:'圈椅',   w:60,  h:58,  icon:'songchair', hz:100},
   'song-console':  {label:'条案',   w:180, h:40,  icon:'songtable', hz:92},
@@ -577,6 +593,7 @@ const FURNITURE_CATS = [
   {label:'厨房', items:['stove','kitchen-sink','fridge','kitchen-cabinet','wall-cabinet','washer']},
   {label:'卫生间', items:['toilet','bathtub','bath-sink','shower']},
   {label:'庭院', items:['stone-table','stone-stool','stone-bench']},
+  {label:'家电与家居', items:['ac-floor','ac-wall','dishwasher','dryer','purifier','tv-wall','piano','beanbag','treadmill','rug','floor-lamp','plant']},
   {label:'宋式', items:['song-armchair','song-console','song-screen','song-daybed','song-shelf','song-stand','song-floor-lamp','song-lantern','song-tea-table','song-scroll']},
   {label:'车辆', items:['car-small','car-sedan','car-suv']}
 ];
@@ -1687,6 +1704,25 @@ function drawFurnitureIcon(icon, w, h, def, fu){
     const {D,n,Rc,Rt} = roundSetDims(fu), k = w/D, cs = 40*k;
     c.beginPath(); c.arc(0,0,Rt*k,0,Math.PI*2); c.stroke(); c.beginPath(); c.arc(0,0,Math.max(1.5,Rt*k*.12),0,Math.PI*2); c.stroke();
     for(let i=0;i<n;i++){ const a = Math.PI*2*i/n + Math.PI/2; c.save(); c.translate(Rc*k*Math.cos(a), Rc*k*Math.sin(a)); c.rotate(a-Math.PI/2); roundRectPath(c,-cs/2,-cs/2,cs,cs,cs*.25); c.fillStyle = getCss('--furniture-fill'); c.fill(); c.stroke(); c.beginPath(); c.moveTo(-cs*.4,cs*.5); c.lineTo(cs*.4,cs*.5); c.lineWidth = 2; c.stroke(); c.restore(); }
+  } else if(icon==='acfloor' || icon==='acwall' || icon==='purifier'){   // 空调/净化器：出风格栅
+    for(let i=-2;i<=2;i++){ c.beginPath(); c.moveTo(-hw*.7, i*hh*.28); c.lineTo(hw*.7, i*hh*.28); c.stroke(); }
+  } else if(icon==='dishwasher' || icon==='dryer'){
+    c.beginPath(); c.arc(0,0,Math.min(hw,hh)*.5,0,Math.PI*2); c.stroke(); c.beginPath(); c.moveTo(-hw*.6,hh*.78); c.lineTo(hw*.6,hh*.78); c.stroke();
+  } else if(icon==='tvwall'){
+    c.fillStyle = getCss('--furniture-detail'); c.globalAlpha = .45; c.fillRect(-hw*.94,-hh*.5,hw*1.88,hh); c.globalAlpha = 1;
+  } else if(icon==='piano'){
+    for(let i=-6;i<=6;i++){ c.beginPath(); c.moveTo(i*hw*.14, hh*.2); c.lineTo(i*hw*.14, hh*.9); c.stroke(); }
+    c.beginPath(); c.moveTo(-hw*.95, hh*.2); c.lineTo(hw*.95, hh*.2); c.stroke();
+  } else if(icon==='beanbag'){
+    c.beginPath(); c.ellipse(0,0,hw*.72,hh*.62,.4,0,Math.PI*2); c.stroke();
+  } else if(icon==='treadmill'){
+    roundRectPath(c,-hw*.7,-hh*.62,hw*1.4,hh*1.5,4); c.stroke(); c.beginPath(); c.moveTo(-hw*.7,-hh*.8); c.lineTo(hw*.7,-hh*.8); c.stroke();
+  } else if(icon==='rug'){
+    roundRectPath(c,-hw*.86,-hh*.84,hw*1.72,hh*1.68,4); c.stroke(); roundRectPath(c,-hw*.7,-hh*.68,hw*1.4,hh*1.36,3); c.stroke();
+  } else if(icon==='floorlamp2'){
+    c.beginPath(); c.arc(0,0,Math.min(hw,hh)*.62,0,Math.PI*2); c.stroke(); c.beginPath(); c.arc(0,0,Math.max(1.5,Math.min(hw,hh)*.12),0,Math.PI*2); c.fill();
+  } else if(icon==='plant'){
+    for(let k=0;k<6;k++){ c.beginPath(); c.ellipse(Math.cos(k*1.047)*hw*.34, Math.sin(k*1.047)*hh*.34, hw*.36, hh*.2, k*1.047, 0, Math.PI*2); c.stroke(); }
   } else if(icon==='table'){
     c.beginPath(); c.arc(0,0, Math.min(hw,hh)*0.15, 0, Math.PI*2); c.stroke();
   } else if(icon==='wardrobe'){
@@ -3892,7 +3928,7 @@ function showPanel(){
 // 兼容旧版本（单层，无 floors 结构）的存档/导入数据
 function normalizeProject(data){
   if(data && Array.isArray(data.floors)){
-    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors, unitCost: data.unitCost, grid: data.grid, style: data.style };
+    return { floors:data.floors.map(ensureFloorShape), currentFloor: Math.min(data.currentFloor||0, data.floors.length-1), nextId: data.nextId||1, neighbors: data.neighbors, unitCost: data.unitCost, grid: data.grid, style: data.style, prices: data.prices, waste: data.waste };
   }
   if(data && Array.isArray(data.walls)){
     return { floors:[ensureFloorShape({id:0, name:'1层', walls:data.walls||[], openings:data.openings||[], labels:data.labels||[]})], currentFloor:0, nextId:data.nextId||1 };
@@ -4863,6 +4899,31 @@ function furnitureParts(fu, H){
       for(let k=0;k<n;k++){ const y=8+(H-16)*(k+.7+rn()*.35)/(n+.5); bx('sowood',cx,y,0,cw-1,2.4,d-3);
         if(rn()<.75){ if(rn()<.5) cy('celadon',cx+(rn()-.5)*cw*.3,yPrev+2.4*(k>0),0,8+rn()*4,10+rn()*12,8+rn()*4); else sp('celadon',cx,yPrev+2.4*(k>0)+5,0,10,10,10); }
         yPrev=y; } if(c<2) bx('sowood',cx+cw/2,8,0,2.2,H-12,d-3); }
+  } else if(icon==='acfloor'){   // 柜机空调：白色圆角柜体 + 出风口 + 显示窗
+    bx('cabW',0,0,0,w,H,d); bx('dark',0,H*.62,d/2+.2,w*.7,H*.16,.5); bx('steel',0,H*.84,d/2+.2,w*.5,1.4,.5); bx('dark',w*.22,H*.92,d/2+.2,6,2,.5);
+  } else if(icon==='acwall'){   // 挂机空调：长条机身 + 出风口
+    bx('cabW',0,0,0,w,H,d); bx('dark',0,3,d/2-.4,w*.86,5,2); bx('steel',w*.35,H-8,d/2+.2,8,3,.5);
+  } else if(icon==='dishwasher'){   // 洗碗机：不锈钢门板 + 顶部控制条 + 把手
+    bx('steel',0,0,0,w,H,d); bx('dark',0,H-9,d/2+.2,w-6,6,.6); bx('steel',0,H-14,d/2+1.4,w*.7,1.6,2.2);
+  } else if(icon==='dryer'){   // 烘干机：和洗衣机成对，圆形观察窗
+    bx('white',0,0,0,w,H,d); cz('dark',0,H*.18,d/2,w*.56,w*.56,2); bx('steel',0,H-8,d/2+.2,w-8,4,.6); cy('steel',w*.3,H-2,d/2-6,5,2,5);
+  } else if(icon==='purifier'){   // 空气净化器：圆角立方体 + 顶部出风格栅
+    bx('cabW',0,0,0,w,H,d); bx('dark',0,H-1.5,0,w*.7,1.6,d*.7); for(let i=-2;i<=2;i++) bx('steel',i*w*.12,H,0,1,.8,d*.6);
+  } else if(icon==='tvwall'){   // 壁挂电视：薄黑屏 + 下沿细边
+    bx('dark',0,0,0,w,H,d); bx('carbody',0,0,d/2,w-2,H-2,.4);
+  } else if(icon==='piano'){   // 立式钢琴：琴身 + 琴盖 + 键盘外伸 + 三个踏板 + 琴凳
+    bx('dark',0,10,-2,w,H-10,d-14); bx('dark',0,0,-d/2+8,w-6,10,d-30); bx('white',0,H*.48,d/2-12,w-10,3,16); for(let i=-5;i<=5;i++) bx('dark',i*w*.085,H*.48+3,d/2-12,w*.05,2,10);
+    [-1,0,1].forEach(i=> bx('brass',i*8,2,d/2-22,4,1.4,6)); bx('dark',0,38,d/2+8,w*.42,5,22); [-1,1].forEach(sg=> cy('dark',sg*w*.16,0,d/2+8,3,38,3));
+  } else if(icon==='beanbag'){   // 懒人沙发：软包椭球
+    sp('caramel',0,0,0,w,H*.95,d); sp('caramel',-w*.08,H*.4,-d*.14,w*.78,H*.6,d*.5);
+  } else if(icon==='treadmill'){   // 跑步机：履带 + 立柱 + 扶手 + 控制台
+    bx('dark',0,10,0,w,8,d); bx('steel',0,14,d*.05,w-10,2,d-30); [-1,1].forEach(sg=> bx('dark',sg*(w/2-4),0,-d/2+12,4,H-10,4)); bx('dark',0,H-22,-d/2+12,w-4,20,8); [-1,1].forEach(sg=> bx('dark',sg*(w/2-5),H*.5,-d/2+30,3,3,d*.3));
+  } else if(icon==='rug'){   // 地毯：薄片 + 一圈镶边
+    bx('oat',0,0,0,w,H,d); bx('caramel',0,H,0,w-14,.2,d-14); bx('oat',0,H,0,w-28,.3,d-28);
+  } else if(icon==='floorlamp2'){   // 现代落地灯：圆座 + 细杆 + 发光灯罩
+    cy('dark',0,0,0,w*.6,2.6,w*.6); cy('dark',0,2.6,0,1.8,H*.62,1.8); cy('paperLamp',0,H*.62,0,w*.9,H*.28,w*.9);
+  } else if(icon==='plant'){   // 绿植：陶盆 + 一丛叶
+    cy('white',0,0,0,w*.7,H*.24,w*.7); cy('seam',0,H*.24,0,w*.62,1.4,w*.62); sp('leafy',0,H*.55,0,w*1.0,H*.5,w*1.0); sp('leafy',w*.18,H*.7,-w*.1,w*.7,H*.4,w*.7); sp('leafy',-w*.2,H*.62,w*.12,w*.6,H*.36,w*.6);
   } else if(icon==='songlamp'){   // 纸罩落地灯：圆座 + 细杆 + 发光的圆柱纸罩
     cy('sowood',0,0,0,w*.6,3,w*.6); cy('sowood',0,3,0,2.6,H*.5,2.6); cy('paperLamp',0,H*.5,0,w,H*.46,w); cy('sowood',0,H*.96,0,w*.7,2.4,w*.7); cy('sowood',0,H*.5-1.6,0,w*.7,1.8,w*.7);
   } else if(icon==='songlantern'){   // 宫灯：六角（用圆柱近似）灯身 + 上下木盖 + 穗子
@@ -5691,7 +5752,7 @@ function build3D(maxFloor, opts){
         else { mesh = new T.Mesh(roundedGeo(sx/100,hh/100,sz/100,radFor(k)/100), mt); mesh.position.set(...pos); }
         if(o.rx||o.ry||o.rz) mesh.rotation.set((mesh.rotation.x||0)+(o.rx||0), (o.ry||0), (o.rz||0));
         mesh.castShadow = k!=='glassM' && k!=='lamp' && k!=='paperLamp'; mesh.receiveShadow = true; mesh.userData.solid = true; grp.add(mesh);
-        if(k==='paperLamp' && !opts.noLights && !grp.userData.hasLight){   // 灯具自带一盏小范围暖光
+        if(k==='paperLamp' && !opts.noLights && !grp.userData.hasLight){   // 落地灯/宫灯等发光件   // 灯具自带一盏小范围暖光
           grp.userData.hasLight = true; const pl = new T.PointLight(0xffd29a, 0, 4.5, 1.8); pl.position.set(0, (hh>0 ? yb+hh/2 : yb)/100, 0); pl.userData.nightLight = 3.2; grp.add(pl); }
       });
       if(!elev){   // 落地家具脚下的接触阴影
@@ -6448,10 +6509,12 @@ function renderMetrics(){
       <tr class="sum"><td>合计</td><td>${d.gross.toFixed(1)}</td><td>${d.net.toFixed(1)}</td><td>${d.floors.reduce((s,f)=>s+f.rooms.length,0)}</td><td>${d.floors.reduce((s,f)=>s+f.winN,0)}/${d.floors.reduce((s,f)=>s+f.doorN,0)}</td><td>${d.net>0?Math.round(d.floors.reduce((s,f)=>s+f.fu,0)/d.net*100)+'%':'-'}</td></tr></table>
     <div class="mhrow" title="1 − (门窗洞口 + 靠墙家具)÷墙面总面积；两面都算，家具只算靠着的那一面">墙面留白 <b>${(()=>{ const w=d.floors.reduce((a,f)=>a+f.wallA,0), o=d.floors.reduce((a,f)=>a+f.occA,0); return w>0 ? Math.round((1-o/w)*100)+'%' : '-'; })()}</b>${d.floors.map(f=>f.wallA>0?` · ${esc(f.name)} ${Math.round((1-f.occA/f.wallA)*100)}%`:'').join('')} <span style="opacity:.6">宋式建议 ≥60%</span></div>
     <div class="mhrow">框架柱 <b>${d.floors.reduce((s,f)=>s+f.colN,0)}</b> 根${d.floors.map(f=>f.colN?` · ${esc(f.name)} ${f.colN}`:'').join('')}</div>
+    <div class="mhrow"><button class="small" id="mhBoq">📋 工程量与造价（分项）…</button></div>
     <div class="mhrow">造价估算 <input type="number" id="mhUnit" min="0" step="100" value="${project.unitCost||''}" placeholder="单价"> 元/m²　${cost ? '≈ <b>'+(cost/10000).toFixed(1)+'</b> 万元' : '<span style="opacity:.6">填单价后显示</span>'}</div>
     ${cur && cur.rooms.some(r=>r.name) ? `<div class="mhsub">${esc(cur.name)} 房间 面积 / 窗地比 / 家具占地</div><table>${cur.rooms.filter(r=>r.name).map(r=>`<tr class="${M_WIN_NEED.test(r.name) && r.win/r.area<M_WIN_MIN?'bad':''}"><td>${esc(r.name)}</td><td>${r.area.toFixed(1)} m²</td><td>${r.win>0?'1/'+(r.area/r.win).toFixed(1):'无窗'}</td><td>${Math.round(r.fu/r.area*100)}%</td></tr>`).join('')}</table>` : ''}
     ${d.warns.length ? `<div class="mhsub">提示</div>${d.warns.map(w=>`<div class="mhw">⚠ ${esc(w)}</div>`).join('')}` : '<div class="mhsub" style="color:#15803d">✓ 暂无提示</div>'}`;
   body.querySelectorAll('tr[data-f]').forEach(tr=> tr.onclick = ()=> switchFloor(+tr.dataset.f));
+  document.getElementById('mhBoq').onclick = boqOpen;
   document.getElementById('mhUnit').onchange = (e)=>{ pushHistory(); project.unitCost = Math.max(0, +e.target.value||0); renderMetrics(); };
 }
 function updateMetrics(force){
@@ -6754,6 +6817,63 @@ function gridRefresh(){
     gridApply(cl(pts.map(p=>p[0])), cl(pts.map(p=>p[1])));
   };
 }
+
+// ---- 工程量与造价（按材料/构件分项）----
+// 从方案里自动统计清单：地面面层按材质、墙体砌筑/粉刷、门窗、楼板、屋顶、柱、楼梯、围栏；单价可改，存在 project.prices，损耗率只对地面面层生效（project.waste，默认 5%）。
+// 默认单价只是占位的示意值（元），不是行情，请按当地价格修改。
+const BOQ_PRICE = {   // key → [名称, 单位, 默认单价]
+  'fl:paving:混凝土':['地面·混凝土','m²',80], 'fl:paving:石材甬道':['地面·石材','m²',380], 'fl:paving:青砖':['地面·青砖','m²',220], 'fl:paving:透水砖':['地面·透水砖','m²',160],
+  'fl:paving:鹅卵石':['地面·鹅卵石','m²',260], 'fl:paving:木地板':['地面·木地板','m²',350], 'fl:paving:沥青':['地面·沥青','m²',90], 'fl:paving:停车位':['地面·停车位','m²',120],
+  'fl:green:草坪':['绿化·草坪','m²',60], 'fl:green:花坛':['绿化·花坛','m²',150], 'fl:green:菜地':['绿化·菜地','m²',40], 'fl:green:灌木绿篱':['绿化·灌木绿篱','m²',120],
+  'fl:water:水池':['水景·水池','m²',600], 'fl:water:鱼塘':['水景·鱼塘','m²',400], 'fl:water:晾晒区':['场地·晾晒区','m²',100], 'fl:struct:凉亭':['构筑·凉亭','m²',1500], 'fl:struct:储物棚':['构筑·储物棚','m²',900],
+  'wall:ext':['外墙砌体','m³',650], 'wall:int':['内墙砌体','m³',600], 'plaster':['墙面粉刷（双面）','m²',45], 'fence':['围栏','m',380],
+  'win':['窗','m²',900], 'door':['门','个',1800], 'gate':['院门','个',6000], 'slab':['楼板','m²',520],
+  'roof:slope':['屋顶·坡屋面','m²',480], 'roof:gable':['屋顶·坡屋面','m²',480], 'roof:xieshan':['屋顶·歇山','m²',720], 'roof:shed':['屋顶·单坡','m²',460], 'roof:flat':['屋顶·平屋面','m²',380],
+  'column':['柱（混凝土）','m³',1400], 'stair':['楼梯','个',12000]
+};
+function computeBOQ(){
+  const rows = {}, add = (key, qty, note)=>{ if(!(qty>0)) return; const r = rows[key] || (rows[key] = {key, qty:0, notes:[]}); r.qty += qty; if(note && !r.notes.includes(note)) r.notes.push(note); };
+  project.floors.forEach((f,fi)=>{
+    const H = f.heightCm||300;
+    f.areas.forEach(a=>{ if(a.kind==='open') return; const A = Math.abs(a.x2-a.x1)*Math.abs(a.y2-a.y1)/10000, struct = a.kind==='water' && (a.material==='凉亭'||a.material==='储物棚');
+      add(struct ? 'fl:struct:'+a.material : 'fl:'+a.kind+':'+(a.material||''), A, f.name); });
+    f.walls.forEach(w=>{ const len = Math.hypot(w.x2-w.x1,w.y2-w.y1)/100; if(w.type==='fence'){ add('fence', len, f.name); return; }
+      const h = Math.min(w.heightCm||H,H)/100, t = (w.thickness||12)/100; let open = 0, openV = 0;
+      f.openings.filter(o=>o.wallId===w.id && o.kind!=='gate').forEach(o=>{ const d = openingDims(o), a = o.width/100*d.h/100; open += a; openV += a*t; });
+      add('wall:'+w.type, Math.max(0, len*h*t-openV), f.name); add('plaster', Math.max(0, len*h-open)*2, f.name); });
+    f.openings.forEach(o=>{ if(o.kind==='door') add('door',1,f.name); else if(o.kind==='gate') add('gate',1,f.name); else add('win', o.width/100*openingDims(o).h/100, f.name); });
+    add('slab', computeCoverRects(fi).reduce((s,r)=>s+r.w*r.h,0)/10000, f.name);
+    (f.roofs||[]).forEach(r=>{ const e = r.eave??50, A = (Math.abs(r.x2-r.x1)+2*e)*(Math.abs(r.y2-r.y1)+2*e)/10000, st = r.style||'slope';
+      add('roof:'+st, st==='flat' ? A : A/Math.cos((r.pitch||30)*Math.PI/180), f.name); });
+    (f.columns||[]).forEach(c=>{ const hz = (typeof c.hz==='number' ? c.hz : H)/100, A = c.shape==='round' ? Math.PI*Math.pow(c.w/200,2) : c.w/100*(c.d||c.w)/100; add('column', A*hz, f.name); });
+    f.stairs.forEach(s=>add('stair',1,f.name));
+  });
+  const prices = project.prices||{}, waste = typeof project.waste==='number' ? project.waste : 5;
+  return Object.values(rows).map(r=>{ const def = BOQ_PRICE[r.key] || ['未定价：'+r.key.replace(/^fl:\w+:/,''),'m²',150], price = typeof prices[r.key]==='number' ? prices[r.key] : def[2], isFloor = r.key.startsWith('fl:'), q = isFloor ? r.qty*(1+waste/100) : r.qty;
+    return Object.assign(r, {name:def[0], unit:def[1], price, custom:typeof prices[r.key]==='number', isFloor, billQty:q, total:q*price}); })
+    .sort((a,b)=> Object.keys(BOQ_PRICE).indexOf(a.key) - Object.keys(BOQ_PRICE).indexOf(b.key));
+}
+function boqOpen(){ const c = document.getElementById('boqCard'); c.hidden = false; boqRender(); }
+function boqRender(){
+  const c = document.getElementById('boqCard'), rows = computeBOQ(), waste = typeof project.waste==='number' ? project.waste : 5, sum = rows.reduce((s,r)=>s+r.total,0), fmt = v=> v>=100 ? Math.round(v).toLocaleString() : v.toFixed(2);
+  c.innerHTML = `<div style="display:flex;align-items:center;gap:8px"><b>工程量与造价</b><span style="opacity:.65">从方案自动统计</span><button class="small" id="bqClose" style="margin-left:auto">关闭</button></div>
+    <div class="hint" style="margin:6px 0">⚠ 单价是<b>占位的示意值</b>，不是行情，请按当地价格逐项修改（改过的项会标蓝）。重叠的地块会重复计算；没铺地块的房间不计面层。</div>
+    <table class="bqt"><tr><th>项目</th><th>数量</th><th>单位</th><th>单价 (元)</th><th>合价 (元)</th></tr>
+    ${rows.map(r=>`<tr title="${esc(r.notes.join('、'))}"><td>${esc(r.name)}${r.isFloor?'<span class="bqw"> +损耗</span>':''}</td><td>${r.billQty.toFixed(r.unit==='个'?0:2)}</td><td>${r.unit}</td><td><input type="number" data-k="${esc(r.key)}" min="0" value="${r.price}" class="${r.custom?'cu':''}"></td><td>${fmt(r.total)}</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;opacity:.6">方案里还没有可统计的内容</td></tr>'}
+    <tr class="sum"><td colspan="4">合计（含地面面层 ${waste}% 损耗）</td><td>${fmt(sum)}</td></tr></table>
+    <div class="tcrow" style="margin-top:8px">地面面层损耗 <input type="number" id="bqWaste" min="0" max="30" value="${waste}" style="width:52px"> %　<button class="small" id="bqCsv">导出 CSV</button> <button class="small" id="bqReset" title="把所有单价恢复成占位默认值">重置单价</button></div>`;
+  c.querySelectorAll('input[data-k]').forEach(i=> i.onchange = ()=>{ pushHistory(); (project.prices = project.prices||{})[i.dataset.k] = Math.max(0,+i.value||0); boqRender(); });
+  document.getElementById('bqWaste').onchange = e=>{ pushHistory(); project.waste = Math.max(0,Math.min(30,+e.target.value||0)); boqRender(); };
+  document.getElementById('bqReset').onclick = ()=>{ pushHistory(); delete project.prices; boqRender(); };
+  document.getElementById('bqClose').onclick = ()=>{ c.hidden = true; };
+  document.getElementById('bqCsv').onclick = ()=>{
+    const q = v=>'"'+String(v).replace(/"/g,'""')+'"', lines = [['项目','数量','单位','单价(元)','合价(元)','出现在'].map(q).join(',')];
+    rows.forEach(r=> lines.push([r.name, r.billQty.toFixed(3), r.unit, r.price, r.total.toFixed(2), r.notes.join('、')].map(q).join(',')));
+    lines.push(['合计','','','',sum.toFixed(2),'含地面面层损耗 '+waste+'%（单价为示意值）'].map(q).join(','));
+    offerFileDownload('工程量与造价.csv', '﻿'+lines.join('\n'), 'text/csv');
+  };
+}
+document.getElementById('btnBoq').onclick = boqOpen;
 // ---- 日照天空图 ----
 // 整个圆盘是一张俯视的天空图：指针相对圆心的【角度】= 太阳方位（0=北=上，顺时针），【距离】= 太阳高度——
 // 圆心是头顶（90°），盘边是地平线（0°），中间线性过渡。拖到盘外会被夹在盘边，高度限制在 5°~85°。
