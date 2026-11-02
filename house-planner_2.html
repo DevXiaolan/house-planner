@@ -375,6 +375,7 @@
           <span class="grow"></span>
           <button class="small" id="v3Edit" title="在 3D 里直接编辑：左键选中/拖动/按工具栏的工具绘制，右键转动视角">✎ 编辑</button>
           <button class="small" id="v3Shot">📷 截图</button>
+          <button class="small" id="v3Walk" title="第一人称步行：站在地面上走、上楼梯、开关门，看每个房间的真实视野">🚶 步行</button>
           <button class="small" id="v3Drone" title="化身无人机，在场景里自由飞行，用自己的镜头观察">🚁 无人机</button>
         </div>
         <div id="sunDock" title="日照（天空图）：在圆盘里拖动太阳——转到哪个方向就是哪个方位（上=北），离圆心越近太阳越高、越靠边越低（边缘=地平线，圆心=头顶）；滚轮也可微调高度">
@@ -394,7 +395,7 @@
         </div>
         <div id="droneHud" hidden>
           <div id="droneBar">
-            <button id="dExit">✕ 退出无人机</button><button id="dReset">⟲ 回起点</button><button id="dShot">📷 拍照</button>
+            <button id="dExit">✕ 退出</button><button id="dWalk">🚶 切换为步行</button><button id="dReset">⟲ 回起点</button><button id="dShot">📷 拍照</button>
             <button id="dExport">⇩ 导出机位 <span id="dShotN">0</span></button><button id="dBar">⚙ 设置栏</button>
           </div>
           <div id="droneTelem"></div>
@@ -5244,7 +5245,7 @@ function mainBbox(){   // 主体建筑占地：所有楼层外墙（没有外墙
 function build3D(maxFloor, opts){
   opts = opts || {}; // 镜头渲染用：{roof:{...}覆盖屋顶设置, ceiling:true 补天花板（室内镜头）, people:false 隐藏参照人物}
   let reflN = 0;
-  const g = new T.Group(), SONG = project.style==='song';   // 宋式预设：暖石灰白墙、青灰瓦、素木、柔光
+  const g = new T.Group(), SONG = project.style==='song'; g.userData.doors = [];   // 宋式预设：暖石灰白墙、青灰瓦、素木、柔光
   const box = new T.BoxGeometry(1,1,1), cylGeo = new T.CylinderGeometry(.5,.5,1,24), sphGeo = new T.SphereGeometry(.5,24,16), planeGeo = new T.PlaneGeometry(1,1);
   const std = (c,o)=> new T.MeshStandardMaterial({color:c, roughness:.8, envMapIntensity:.45, ...(o||{})});
   const phys = (c,o)=> new T.MeshPhysicalMaterial({color:c, roughness:.8, envMapIntensity:.45, ...(o||{})});
@@ -5383,7 +5384,7 @@ function build3D(maxFloor, opts){
       return [{x:r.x,y:r.y,w:r.w,h:y1-r.y},{x:r.x,y:y2,w:r.w,h:r.y+r.h-y2},{x:r.x,y:y1,w:x1-r.x,h:y2-y1},{x:x2,y:y1,w:r.x+r.w-x2,h:y2-y1}].filter(q=>q.w>.5&&q.h>.5);
     });
     const covers = sunk.reduce((rs,h)=>cutRects(rs,h), mergeRects(computeCoverRects(fi)));
-    covers.forEach(r=> addW(M.slab, r.x+r.w/2, base-6, r.y+r.h/2, r.w, 12, r.h, 0, 150));
+    covers.forEach(r=>{ addW(M.slab, r.x+r.w/2, base-6, r.y+r.h/2, r.w, 12, r.h, 0, 150).userData.walk = true; });   // walk：步行模式里可以踩的面
     // 上层的场地要素（露台/花坛）若伸到楼板之外，下面补一块承重薄板，免得悬在半空；
     // 本层露天标记和下层楼梯井是故意留的洞，不补
     const holes = fi>0 ? f.areas.filter(a=>a.kind==='open').map(a=>({x:Math.min(a.x1,a.x2), y:Math.min(a.y1,a.y2), w:Math.abs(a.x2-a.x1), h:Math.abs(a.y2-a.y1)}))
@@ -5399,7 +5400,7 @@ function build3D(maxFloor, opts){
           if(!ok && run>=0){ rows.push({x:run, y, w:Math.min(x,x2)-run, h:hh}); run=-1; }
         }
       }
-      mergeRects(rows).forEach(r=> addW(M.slab, r.x+r.w/2, base-6, r.y+r.h/2, r.w, 12, r.h, 0, 150));
+      mergeRects(rows).forEach(r=>{ addW(M.slab, r.x+r.w/2, base-6, r.y+r.h/2, r.w, 12, r.h, 0, 150).userData.walk = true; });
     };
 
     // 地块高度偏移（cm，负=下沉，如庭院比回廊低）：自己设了就用自己的；没设的（池塘、草坪等）跟随脚下已设高度偏移的铺装/绿地
@@ -5479,6 +5480,18 @@ function build3D(maxFloor, opts){
             add(M.glass, wl.x1+ux*sc, base+(o.sill+o.top)/2, wl.y1+uz*sc, ww-2*fw+1, hh-2*fw+1, 1.2, ry).castShadow = false;
           }
           addR(FM.stone, wl.x1+ux*sc, base+o.sill-1.6, wl.y1+uz*sc, ww+8, 3.2, t+7, ry, cur, .4);
+        }
+        if(o.kind==='door' && o.dst!=='gezi'){   // 门扇：绕铰链转动；只在步行模式里显示（平时不画，免得挡住户内视线、也不改变结构图）
+          const op_ = f.openings.find(q=>q.id===o.id) || {}, hinge = op_.hinge||0, swing = op_.swing||1, jw_ = 3.2, w_ = o.b-o.a-2*jw_, hgt = o.top-jw_;
+          const ux_ = ux, uz_ = uz, nx_ = -uz, nz_ = ux, hp = hinge===0 ? o.a+jw_ : o.b-jw_, pivot = new T.Group();
+          pivot.position.set((wl.x1+ux_*hp)/100, base/100, (wl.y1+uz_*hp)/100);
+          const dc = hinge===0 ? [ux_,uz_] : [-ux_,-uz_], dO = [swing*nx_, swing*nz_], ang = d=> Math.atan2(-d[1], d[0]);
+          let a0 = ang(dc), a1 = ang(dO); if(a1-a0>Math.PI) a1 -= Math.PI*2; if(a0-a1>Math.PI) a1 += Math.PI*2;
+          const leaf = new T.Mesh(box, SONG ? FM.wood : FM.cabW); leaf.scale.set(w_/100, hgt/100, .04); leaf.position.set(w_/200, hgt/200, 0); leaf.castShadow = leaf.receiveShadow = true;
+          const knob = new T.Mesh(sphGeo, FM.brass); knob.scale.setScalar(.05); knob.position.set(w_/100-.07, 1.0, .035); pivot.add(leaf, knob);
+          const door = {pivot, a0, a1, cur:a1, open:true, L:w_/100, id:o.id, fi};
+          pivot.rotation.y = a1; pivot.visible = false; pivot.userData.doorLeaf = door; leaf.userData.doorRef = door; knob.userData.doorRef = door; leaf.userData.src = knob.userData.src = {type:'opening', id:o.id, fi};
+          cur.add(pivot); (g.userData.doors = g.userData.doors||[]).push(door);
         }
         if(o.kind==='door'){   // 门套：两侧立框 + 门头，比直接一个洞更像"做过收口"
           const jw=3.2, dep=t+1.4, jb=(sp,yc,sl,sy)=> addR(FM.trim, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, dep, ry, cur, .3);
@@ -5569,7 +5582,7 @@ function build3D(maxFloor, opts){
       if(ar.kind==='paving') mt = paveMats(ar, aw, ah);
       else if(!struct) mt = softGroundMat(ar.kind, ar.material, aw, ah);
       const bot = lift<0 ? lift-10 : 0, topY = hh+lift;   // 下沉时地块往下延伸，露出下面的坑；抬高时从 0 起
-      add(mt || (struct?M.struct:M.slab), (ar.x1+ar.x2)/2, base+(bot+topY)/2, (ar.y1+ar.y2)/2, aw, topY-bot, ah).userData.solid = !!struct; // 地面铺装不挡无人机，凉亭/棚子才挡
+      { const am = add(mt || (struct?M.struct:M.slab), (ar.x1+ar.x2)/2, base+(bot+topY)/2, (ar.y1+ar.y2)/2, aw, topY-bot, ah); am.userData.solid = !!struct; if(!struct && ar.kind!=='water') am.userData.walk = true; } // 地面铺装不挡无人机，凉亭/棚子才挡；水面不能踩
       if(ar.kind==='water' && !struct && REFL && reflN<2 && opts.reflect!==false){   // 水面倒影（最多 2 块，每块多渲一遍场景）
         reflN++;
         const rp = new REFL(new T.PlaneGeometry(aw/100, ah/100), {textureWidth:512, textureHeight:512, color:0x3f6f7a, clipBias:.003});
@@ -5585,8 +5598,7 @@ function build3D(maxFloor, opts){
         [...(ar.steps||'')].forEach(sd=>{
           const horiz = sd==='n'||sd==='s', wS = Math.min((horiz?aw:ah)*.6, 180);
           for(let k=1;k<nS;k++){ const off = (nS-1-k)*gT+gT/2, hk = rise*k;
-            if(sd==='n') add(FM.coping, cx_, base+hk/2, z1_-off, wS, hk, gT); else if(sd==='s') add(FM.coping, cx_, base+hk/2, z2_+off, wS, hk, gT);
-            else if(sd==='w') add(FM.coping, x1_-off, base+hk/2, cz_, gT, hk, wS); else if(sd==='e') add(FM.coping, x2_+off, base+hk/2, cz_, gT, hk, wS); }
+            const stp = sd==='n' ? add(FM.coping, cx_, base+hk/2, z1_-off, wS, hk, gT) : sd==='s' ? add(FM.coping, cx_, base+hk/2, z2_+off, wS, hk, gT) : sd==='w' ? add(FM.coping, x1_-off, base+hk/2, cz_, gT, hk, wS) : add(FM.coping, x2_+off, base+hk/2, cz_, gT, hk, wS); stp.userData.walk = true; }
         });
       }
       if(typeof ar.lift==='number' && lift<0 && !struct){   // 下沉：四周补一圈石砌挡墙（内侧贴地块边缘，顶面比回廊高 1cm）
@@ -5732,10 +5744,10 @@ function build3D(maxFloor, opts){
           // 实心台阶：下面是一整块（只到踏板底），顶上盖一块出挑的踏板；踏板在"前缘"（上行时的低端）多出 nos，后缘与块齐平。
           // 块的深度缩进 nos，这样踏板出挑部分下面是空的（真实楼梯的踏板前缘悬在踢面外面），而不是整个叠在块上。
           const bx0 = sp.dir>0 ? sp.x0+nos : sp.x0, bx1 = sp.dir>0 ? sp.x1 : sp.x1-nos;
-          addS(tm, (bx0+bx1)/2, (sp.top-tT)/2, cz, bx1-bx0, sp.top-tT, W, 0, core, .4);
-          addS(tm, cx+(sp.dir>0?-1:1)*nos/2, sp.top-tT/2, cz, L+nos, tT, W, 0, core, .5);
+          addS(tm, (bx0+bx1)/2, (sp.top-tT)/2, cz, bx1-bx0, sp.top-tT, W, 0, core, .4).userData.walk = true;
+          addS(tm, cx+(sp.dir>0?-1:1)*nos/2, sp.top-tT/2, cz, L+nos, tT, W, 0, core, .5).userData.walk = true;
         } else {
-          addS(tm, cx+(-sp.dir)*nos/2, sp.top-tT/2, cz, L+nos, tT, W, 0, core, .5);                      // 空心：只有踏板，前缘出挑
+          addS(tm, cx+(-sp.dir)*nos/2, sp.top-tT/2, cz, L+nos, tT, W, 0, core, .5).userData.walk = true;   // 空心：只有踏板，前缘出挑
           if(o.riser && o.under!=='cantilever') addS(sm, sp.dir>0?sp.x0+1:sp.x1-1, sp.top-rise/2-tT/2, cz, 1.6, rise-tT, W, 0, core, .3);   // 薄踢面（踏板前缘下面的一块竖板）
           if(o.riser && o.under==='cantilever') addS(tm, sp.dir>0?sp.x0+1:sp.x1-1, sp.top-rise/2-tT/2, cz, 1.6, rise-tT, W, 0, core, .3);
         }
@@ -5743,8 +5755,8 @@ function build3D(maxFloor, opts){
       // 休息平台（双跑）
       if(double){
         const px0=-a/2+runL, pw=a-runL;
-        if(o.under==='solid'||o.under==='storage') addS(tm, px0+pw/2, H/4, 0, pw, H/2, b, 0, core, .6);
-        else addS(tm, px0+pw/2, H/2-tT/2, 0, pw, tT, b, 0, core, .5);
+        if(o.under==='solid'||o.under==='storage') addS(tm, px0+pw/2, H/4, 0, pw, H/2, b, 0, core, .6).userData.walk = true;
+        else addS(tm, px0+pw/2, H/2-tT/2, 0, pw, tT, b, 0, core, .5).userData.walk = true;
         if(o.under==='open'){
           [-1,1].forEach(sx=> [-1,1].forEach(sz=> addS(sm, sx>0 ? a/2-5 : px0+5, H/4-tT/2, sz*(b/2-5), 7, H/2-tT, 7, 0, core, .8)));   // 平台下四根立柱
         }
@@ -6784,7 +6796,7 @@ window.addEventListener('resize', ()=>{ if(three && !view3d.hidden) resize3D(); 
 // 碰撞：build3D 里标了 userData.solid 的网格（墙、楼板、窗玻璃、家具、楼梯、树…）统一当成"带朝向的盒子"，
 // 无人机是球，逐个求球到盒的最近点并推出去（所以会沿墙滑行）；屋面是一张薄的高度面，单独按"从哪一侧过来就待在哪一侧"处理。
 // 门洞/月洞窗是真空的，所以能钻；封着的窗有玻璃，钻不过去。
-const drone = { on:false, pos:null, vel:null, yaw:0, pitch:-.1, roll:0, speed:2, fovIdx:0, keys:new Set(),
+const drone = { walk:false, feet:0, vy:0, walkables:[], on:false, pos:null, vel:null, yaw:0, pitch:-.1, roll:0, speed:2, fovIdx:0, keys:new Set(),
   colliders:[], roofs:[], roofSide:0, start:null, raf:0, last:0, manual:false,
   shots:[], saved:null, hintUntil:0, hudT:0, mapT:0, bbox:null, push:null, tmp:null, drag:null, cleanup:[] };
 const DR = .28, DRONE_FOVS = [78,95,58];
@@ -6793,7 +6805,7 @@ const clampN = (v,a,b)=> v<a?a:v>b?b:v;
 function droneBases(){ const a=[]; let acc=0; project.floors.forEach(f=>{ a.push(acc); acc += f.heightCm||300; }); return a; }
 function droneFloorIdx(){ const b=droneBases(), yc=drone.pos.y*100; let i=0; for(let k=0;k<b.length;k++) if(yc>=b[k]) i=k; return i; }
 function droneBuildColliders(){
-  drone.colliders = []; drone.roofs = [];
+  drone.colliders = []; drone.roofs = []; drone.walkables = [];
   if(!three || !three.group) return;
   const grp = three.group; grp.updateMatrixWorld(true);
   const box = new T.Box3(), sz = new T.Vector3();
@@ -6801,6 +6813,10 @@ function droneBuildColliders(){
     if(!o.isMesh) return;
     if(o.parent && o.parent.userData.ghost) return;     // 隐形遮光体不参与无人机碰撞
     if(o.userData.roofSample){ const f=o.userData.roofSample, dy=o.matrixWorld.elements[13]; drone.roofs.push((x,z)=>{ const v=f(x,z); return v===null ? null : v+dy; }); return; }
+    if(o.userData.walk){   // 可踩的面：只收没有倾斜的盒子（楼板、踏步、平台、地块），记下顶面高度和本地范围
+      const gw = o.geometry; if(!gw.boundingBox) gw.computeBoundingBox(); const e = o.matrixWorld.elements;
+      if(Math.abs(e[5])>.999){ const bw = new T.Box3().copy(gw.boundingBox).applyMatrix4(o.matrixWorld); drone.walkables.push({inv:o.matrixWorld.clone().invert(), bmin:gw.boundingBox.min.clone(), bmax:gw.boundingBox.max.clone(), top:bw.max.y}); }
+    }
     if(!o.userData.solid) return;
     const g = o.geometry; if(!g.boundingBox) g.computeBoundingBox();
     box.copy(g.boundingBox).applyMatrix4(o.matrixWorld); box.getSize(sz);
@@ -6834,6 +6850,64 @@ function droneResolve(P){
   }
   return hit ? push : null;
 }
+// ---- 第一人称步行 ----
+const WALK_EYE = 1.6, WALK_STEP = .45, WALK_R = .26;
+function walkGroundAt(x,z,feet){   // 脚下可踩的最高面（高度不超过 脚+一步的高度）；没有就是地面 0
+  let best = 0; const v = drone.walkL;
+  for(const w of drone.walkables){
+    if(w.top>feet+WALK_STEP || w.top<=best) continue;
+    v.set(x, w.top-1e-3, z).applyMatrix4(w.inv);
+    if(v.x>=w.bmin.x-1e-3 && v.x<=w.bmax.x+1e-3 && v.z>=w.bmin.z-1e-3 && v.z<=w.bmax.z+1e-3) best = w.top;
+  }
+  return best;
+}
+function walkDoorEnd(d){ const p = d.pivot.getWorldPosition(drone.walkW); return [p.x, p.z, p.x+Math.cos(d.cur)*d.L, p.z-Math.sin(d.cur)*d.L]; }
+function walkDoorPush(P){   // 门扇是一条线段：人（圆）离线段太近就推开
+  const doors = three.group.userData.doors||[];
+  for(const d of doors){ if(!d.pivot.visible) continue; const [x0,z0,x1,z1] = walkDoorEnd(d), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1), cx = x0+dx*t, cz = z0+dz*t, dd = Math.hypot(P.x-cx,P.z-cz), R = WALK_R*.85;
+    if(dd<R){ const k = dd>1e-5 ? (R-dd)/dd : 0; if(dd>1e-5){ P.x += (P.x-cx)*k; P.z += (P.z-cz)*k; } else { P.x += -dz/Math.sqrt(l2)*R; P.z += dx/Math.sqrt(l2)*R; } } }
+}
+function walkStep(dt){
+  dt = clampN(dt,0,.05); const k = drone.keys, P = drone.pos, ax = n=>k.has(n)?1:0, tmpP = drone.walkP;   // 步行自己的临时向量：不能借用 drone.tmp（droneResolve 内部会覆盖它）
+  let fwd = ax('KeyW')-ax('KeyS'), str = ax('KeyD')-ax('KeyA'); const ml = Math.hypot(fwd,str); if(ml>1){ fwd/=ml; str/=ml; }
+  const yawIn = ax('ArrowRight')-ax('ArrowLeft'), pitchIn = ax('ArrowUp')-ax('ArrowDown');
+  drone.yaw += yawIn*1.6*dt; drone.pitch = clampN(drone.pitch+pitchIn*1.1*dt,-1.35,1.35);
+  const sp = ((k.has('ShiftLeft')||k.has('ShiftRight')) ? 2.8 : 1.4)*dt, sy = Math.sin(drone.yaw), cy = Math.cos(drone.yaw), mx = (sy*fwd+cy*str)*sp, mz = (-cy*fwd+sy*str)*sp;
+  const n = Math.max(1, Math.ceil(Math.hypot(mx,mz)/.06));   // 分小步，不穿墙
+  for(let i=0;i<n;i++){
+    P.x += mx/n; P.z += mz/n;
+    for(const hy of [.5,1.2]){ tmpP.set(P.x, drone.feet+hy, P.z); droneResolve(tmpP); P.x = tmpP.x; P.z = tmpP.z; }
+    walkDoorPush(P);
+  }
+  const g = walkGroundAt(P.x,P.z,drone.feet);   // 重力 + 上台阶
+  if(g>drone.feet){ drone.feet += (g-drone.feet)*Math.min(1,dt*16); if(g-drone.feet<.004) drone.feet = g; drone.vy = 0; }
+  else { drone.vy -= 9.8*dt; drone.feet += drone.vy*dt; if(drone.feet<=g){ drone.feet = g; drone.vy = 0; } }
+  P.y = drone.feet + WALK_EYE; drone.roll = 0; drone.vel.set(mx/dt||0, 0, mz/dt||0);
+  const doors = three.group.userData.doors||[]; doors.forEach(d=>{ d.cur += ((d.open?d.a1:d.a0)-d.cur)*Math.min(1,dt*6); d.pivot.rotation.y = d.cur; });
+  droneApplyCamera();
+}
+function walkToggleDoor(){   // 对准镜头正前方 2.6m 内的门扇：开/关
+  const doors = three.group.userData.doors||[]; if(!doors.length) return false;
+  const rc = drone.rc || (drone.rc = new T.Raycaster()); rc.setFromCamera(new T.Vector2(0,0), three.camera); rc.far = 2.6;
+  const meshes = []; doors.forEach(d=> d.pivot.children.forEach(c=>meshes.push(c)));
+  const h = rc.intersectObjects(meshes,false)[0]; if(!h || !h.object.userData.doorRef) return false;
+  const d = h.object.userData.doorRef; d.open = !d.open; return true;
+}
+function walkSet(on){
+  drone.walk = !!on; const g = three.group; (g.userData.doors||[]).forEach(d=>{ d.pivot.visible = drone.walk; });
+  const bt = document.getElementById('dWalk'); if(bt) bt.textContent = drone.walk ? '✈ 切换为飞行' : '🚶 切换为步行';
+  if(drone.walk){
+    // 起点：当前楼层最大的房间中心（没有房间就取建筑中心），站在地面上，面朝建筑中心
+    const fi = project.currentFloor, sv = {state, roomsCache, roomsSig, roomsGridMeta}; state = project.floors[fi]; detectRooms(fi);
+    const r = roomsCache.slice().sort((a,b)=>b.areaM2-a.areaM2)[0], b = drone.bbox, cx = (b.x1+b.x2)/200, cz = (b.y1+b.y2)/200;
+    const px = r ? r.cx/100 : cx, pz = r ? r.cy/100 : cz; ({state, roomsCache, roomsSig, roomsGridMeta} = sv);
+    drone.pos.set(px, droneBases()[fi]/100+WALK_EYE+.2, pz); drone.feet = droneBases()[fi]/100+.2; drone.vy = 0; drone.vel.set(0,0,0); drone.pitch = -.03; drone.roll = 0;
+    drone.yaw = Math.atan2(cx-px, -(cz-pz)); if(Math.hypot(cx-px,cz-pz)<.5) drone.yaw = 0;
+    droneApplyCamera();
+  } else { drone.pos.y = Math.max(drone.pos.y, drone.feet+1.2); }
+  drone.hintUntil = performance.now()+9000;
+  const ht = document.getElementById('droneHint'); ht.innerHTML = drone.walk ? '<b>WASD</b> 行走 · <b>Shift</b> 快走 · <b>拖拽/方向键</b> 看 · <b>E 或点击</b> 开关门（正前方 2.6m 内）<br><b>P</b> 拍照 · <b>R</b> 回起点 · <b>F</b> 视野 · <b>H</b> 隐藏提示 · <b>Esc</b> 退出' : drone.defaultHint;
+}
 function droneCollide(P,Vv){
   if(drone.roofs.length){          // 屋面：第一次进入屋面范围时在哪一侧，就一直待在那一侧
     let h = null; for(const f of drone.roofs){ const v=f(P.x,P.z); if(v!==null && (h===null||v>h)) h=v; }
@@ -6851,6 +6925,7 @@ function droneApplyCamera(){
   const c = three.camera; c.position.copy(drone.pos); c.rotation.order = 'YXZ'; c.rotation.set(drone.pitch, -drone.yaw, drone.roll);
 }
 function droneStep(dt){
+  if(drone.walk){ walkStep(dt); return; }
   dt = clampN(dt,0,.05);
   const k=drone.keys, P=drone.pos, Vv=drone.vel, ax=n=>k.has(n)?1:0;
   let fwd=ax('KeyW')-ax('KeyS'), str=ax('KeyD')-ax('KeyA'), up=ax('Space')-ax('KeyC');
@@ -6907,7 +6982,7 @@ function droneHud(ts){
   if(ts-drone.hudT>100){
     drone.hudT=ts;
     const P=drone.pos, fi=droneFloorIdx(), deg=((drone.yaw*180/Math.PI)%360+360)%360, names=['北','东北','东','东南','南','西南','西','西北'];
-    document.getElementById('droneTelem').innerHTML = `位于 ${esc(project.floors[fi].name)} · 高度 ${P.y.toFixed(1)} m<br>速度 ${drone.vel.length().toFixed(1)} m/s（巡航 ${drone.speed.toFixed(1)}）<br>航向 ${Math.round(deg)}° ${names[Math.round(deg/45)%8]} · 视野 ${DRONE_FOVS[drone.fovIdx]}°`;
+    document.getElementById('droneTelem').innerHTML = drone.walk ? `步行 · ${esc(project.floors[fi].name)} · 眼高 ${P.y.toFixed(2)} m<br>航向 ${Math.round(deg)}° ${names[Math.round(deg/45)%8]}` : `位于 ${esc(project.floors[fi].name)} · 高度 ${P.y.toFixed(1)} m<br>速度 ${drone.vel.length().toFixed(1)} m/s（巡航 ${drone.speed.toFixed(1)}）<br>航向 ${Math.round(deg)}° ${names[Math.round(deg/45)%8]} · 视野 ${DRONE_FOVS[drone.fovIdx]}°`;
   }
   if(ts-drone.mapT>66){ drone.mapT=ts; droneDrawMap(); }
 }
@@ -6934,7 +7009,8 @@ function droneOnKey(e,down){
   if(down){
     if(code==='Escape'){ e.preventDefault(); droneExit(); return; }
     if(!e.repeat){
-      if(code==='KeyP') dronePhoto(); else if(code==='KeyR') droneReset();
+      if(code==='KeyP') dronePhoto(); else if(code==='KeyR'){ droneReset(); if(drone.walk) walkSet(true); }
+      else if(code==='KeyE' && drone.walk) walkToggleDoor();
       else if(code==='KeyF') droneSetFov((drone.fovIdx+1)%DRONE_FOVS.length);
       else if(code==='KeyH') drone.hintUntil = drone.hintUntil>performance.now() ? 0 : performance.now()+1e9;
     }
@@ -6954,7 +7030,7 @@ async function droneEnter(){
   if(editMode) setEdit(false);
   if(view3d.hidden) await btn3D.onclick();         // 还没打开 3D 就先打开
   if(!T || view3d.hidden) return false;
-  const tmp = drone.tmp = { l:new T.Vector3(), q:new T.Vector3(), w:new T.Vector3(), d:new T.Vector3() };
+  const tmp = drone.tmp = { l:new T.Vector3(), q:new T.Vector3(), w:new T.Vector3(), d:new T.Vector3() }; drone.walkP = new T.Vector3(); drone.walkL = new T.Vector3(); drone.walkW = new T.Vector3();
   drone.push = new T.Vector3(); drone.pos = new T.Vector3(); drone.vel = new T.Vector3();
   const {camera,controls,renderer} = three;
   drone.saved = { pos:camera.position.clone(), target:controls.target.clone(), fov:camera.fov, near:camera.near };
@@ -6969,16 +7045,18 @@ async function droneEnter(){
   const el = renderer.domElement, on = (t,ty,fn,o)=>{ t.addEventListener(ty,fn,o); drone.cleanup.push(()=>t.removeEventListener(ty,fn,o)); };
   on(window,'keydown',e=>droneOnKey(e,true),true); on(window,'keyup',e=>droneOnKey(e,false),true);
   on(window,'blur',()=>drone.keys.clear());
-  on(el,'pointerdown',e=>{ drone.drag={id:e.pointerId,x:e.clientX,y:e.clientY}; try{ el.setPointerCapture(e.pointerId); }catch(_){} });
+  on(el,'pointerdown',e=>{ drone.drag={id:e.pointerId,x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY}; try{ el.setPointerCapture(e.pointerId); }catch(_){} });
   on(el,'pointermove',e=>{ const d=drone.drag; if(!d||d.id!==e.pointerId) return; drone.yaw+=(e.clientX-d.x)*.0035; drone.pitch=clampN(drone.pitch-(e.clientY-d.y)*.0035,-1.35,1.35); d.x=e.clientX; d.y=e.clientY; });
-  on(el,'pointerup',()=>{ drone.drag=null; }); on(el,'pointercancel',()=>{ drone.drag=null; });
+  on(el,'pointerup',e=>{ const d = drone.drag; drone.drag = null; if(drone.walk && d && Math.hypot(e.clientX-d.x0, e.clientY-d.y0)<5) walkToggleDoor(); }); on(el,'pointercancel',()=>{ drone.drag=null; });
   on(el,'wheel',e=>{ e.preventDefault(); drone.speed=clampN(drone.speed*Math.pow(1.15,-Math.sign(e.deltaY)),.5,8); drone.hintUntil=Math.max(drone.hintUntil,performance.now()+2500); },{passive:false});
   const map=document.getElementById('droneMap');
   map.onpointerdown=e=>{   // 点小地图 = 传送到那里（高度不变；落在墙里会被推出来）
     const r=map.getBoundingClientRect(), {s,ox,oy}=droneMapXf(), mx=(e.clientX-r.left)/r.width*map.width, my=(e.clientY-r.top)/r.height*map.height;
     drone.pos.x=(mx-ox)/s/100; drone.pos.z=(my-oy)/s/100; drone.vel.set(0,0,0); drone.roofSide=0; droneCollide(drone.pos,drone.vel); droneApplyCamera(); e.stopPropagation(); e.preventDefault();
   };
-  document.getElementById('dExit').onclick=droneExit; document.getElementById('dReset').onclick=droneReset;
+  drone.defaultHint = document.getElementById('droneHint').innerHTML; drone.walk = false;
+  document.getElementById('dWalk').onclick = ()=> walkSet(!drone.walk);
+  document.getElementById('dExit').onclick=droneExit; document.getElementById('dReset').onclick=()=>{ droneReset(); if(drone.walk) walkSet(true); };
   document.getElementById('dShot').onclick=dronePhoto; document.getElementById('dExport').onclick=droneExportShots;
   document.getElementById('dBar').onclick=()=> view3d.classList.toggle('drone-bar');
   drone.hintUntil = performance.now()+9000; drone.last = performance.now(); drone.hudT = drone.mapT = 0;
@@ -6988,6 +7066,7 @@ async function droneEnter(){
 }
 function droneExit(){
   if(!drone.on) return;
+  drone.walk = false;
   drone.on = false; cancelAnimationFrame(drone.raf);
   drone.cleanup.forEach(f=>f()); drone.cleanup = []; drone.keys.clear();
   view3d.classList.remove('drone-on','drone-bar'); document.getElementById('droneHud').hidden = true;
@@ -6999,6 +7078,7 @@ function droneExit(){
   draw3D();
 }
 document.getElementById('v3Drone').onclick = ()=> drone.on ? droneExit() : droneEnter();
+document.getElementById('v3Walk').onclick = async ()=>{ if(drone.on){ walkSet(!drone.walk); return; } if(await droneEnter()) walkSet(true); };
 // 给脚本/测试/AI 导演用的接口（单位：平面坐标 cm，高度 m，角度 °）
 window.houseDrone = {
   enter: droneEnter, exit: droneExit,
