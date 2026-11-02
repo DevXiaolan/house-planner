@@ -365,6 +365,7 @@
             <span class="vpopwrap"><button class="small" id="v3ViewMore">立面 ▾</button>
               <div class="vpop" id="v3ViewPop"><button class="small" data-view="n">北立面</button><button class="small" data-view="e">东立面</button><button class="small" data-view="s">南立面</button><button class="small" data-view="w">西立面</button></div></span>
           </span>
+          <label class="vgrp" title="夜景：压暗天空和阳光，室内每个房间亮一盏暖灯，宋式灯具（纸罩灯、宫灯）发光"><input type="checkbox" id="v3Night"> 夜景</label>
           <label class="vgrp" title="展开视图：每层（含屋顶）沿竖直方向拉开，像剖视图；开启时显示整栋，「显示到」不起作用"><input type="checkbox" id="v3Explode"> 展开视图</label><input type="range" id="v3Gap" min="1" max="6" step=".5" value="2.5" style="width:72px;display:none" title="层间距（米）">
           <label class="vgrp" title="显示/隐藏邻居（配置保留在方案里）"><input type="checkbox" id="v3NbShow" checked> 邻居</label>
           <span class="vpopwrap"><button class="small" id="v3Nb" title="九宫格邻居：模拟周边建筑对采光/视野的影响">🏘 设置 ▾</button>
@@ -4581,6 +4582,7 @@ document.getElementById('btnGistPull').onclick = async ()=>{
 const view3d = document.getElementById('view3d');
 let T = null, three = null; // T=THREE 命名空间；three={renderer,scene,camera,controls,sun,group,fit}
 let explode = false;        // 分层展开：各层沿竖直方向拉开
+let night = false;   // 夜景：不存进方案（和展开视图一样是观看选项）
 let sunAz = 120, sunEl = 50; // 日照方位角（0=北，顺时针）和高度角，由圆环旋钮驱动
 let EXPLODE_GAP = 2.5;    // 米，展开时相邻楼层额外拉开的距离
 // 围栏样式 wl.fenceStyle（只对 type==='fence'）：solid 实心(旧工程默认) / picket 竖栅栏 / iron 铁艺栏杆 / half 下实上虚 / lattice 花格漏窗墙
@@ -4861,9 +4863,9 @@ function furnitureParts(fu, H){
         if(rn()<.75){ if(rn()<.5) cy('celadon',cx+(rn()-.5)*cw*.3,yPrev+2.4*(k>0),0,8+rn()*4,10+rn()*12,8+rn()*4); else sp('celadon',cx,yPrev+2.4*(k>0)+5,0,10,10,10); }
         yPrev=y; } if(c<2) bx('sowood',cx+cw/2,8,0,2.2,H-12,d-3); }
   } else if(icon==='songlamp'){   // 纸罩落地灯：圆座 + 细杆 + 发光的圆柱纸罩
-    cy('sowood',0,0,0,w*.6,3,w*.6); cy('sowood',0,3,0,2.6,H*.5,2.6); cy('lamp',0,H*.5,0,w,H*.46,w); cy('sowood',0,H*.96,0,w*.7,2.4,w*.7); cy('sowood',0,H*.5-1.6,0,w*.7,1.8,w*.7);
+    cy('sowood',0,0,0,w*.6,3,w*.6); cy('sowood',0,3,0,2.6,H*.5,2.6); cy('paperLamp',0,H*.5,0,w,H*.46,w); cy('sowood',0,H*.96,0,w*.7,2.4,w*.7); cy('sowood',0,H*.5-1.6,0,w*.7,1.8,w*.7);
   } else if(icon==='songlantern'){   // 宫灯：六角（用圆柱近似）灯身 + 上下木盖 + 穗子
-    cy('rust',0,0,0,1.6,H*.2,1.6); cy('sowood',0,H*.2,0,w*.9,3,w*.9); cy('lamp',0,H*.2+3,0,w*.8,H*.52,w*.8); cy('sowood',0,H*.2+3+H*.52,0,w*.9,3,w*.9); cy('sowood',0,H*.2+6+H*.52,0,4,H*.2,4);
+    cy('rust',0,0,0,1.6,H*.2,1.6); cy('sowood',0,H*.2,0,w*.9,3,w*.9); cy('paperLamp',0,H*.2+3,0,w*.8,H*.52,w*.8); cy('sowood',0,H*.2+3+H*.52,0,w*.9,3,w*.9); cy('sowood',0,H*.2+6+H*.52,0,4,H*.2,4);
     corners.forEach(([sx,sz])=> cy('sowood',sx*w*.3,H*.2+3,sz*w*.3,1.6,H*.52,1.6));
   } else if(icon==='songtea'){   // 茶案：低案 + 茶盘 + 提梁壶 + 茶盏
     bx('sowood',0,H-4,0,w,4,d); corners.forEach(([sx,sz])=> cy('sowood',sx*(w/2-6),0,sz*(d/2-6),4.6,H-4,4.6)); bx('sowood',0,H-9,0,w-14,5,2.2);
@@ -5258,7 +5260,8 @@ function build3D(maxFloor, opts){
     pitWall: std('#cfc8b8',{roughness:.85}), trunk: std('#6e5440',{roughness:.95}), struct: std('#b8946a',{roughness:.7}),
     glass: phys('#a8cddd',{transparent:true, opacity:.22, roughness:.04, metalness:0, envMapIntensity:1.6, depthWrite:false}),
     leafA: std('#68a357',{roughness:.85}), leafB: std('#7bb565',{roughness:.85}), leafC: std('#58954b',{roughness:.85}), conifer: std('#3c7a45',{roughness:.85}),
-    ground: std('#ffffff',{map:groundMap, roughness:1, envMapIntensity:.15})
+    ground: std('#ffffff',{map:groundMap, roughness:1, envMapIntensity:.15}),
+    ceilLamp: new T.MeshStandardMaterial({color:'#ffffff', emissive:'#fff2d6', emissiveIntensity:.25})
   };
   const grainW = grainTex(SONG?'#9a7c58':'#76503a'), grainO = grainTex(SONG?'#d9c8a4':'#cdb08a'), grainS = grainTex('#b79d73');
   const FM = {
@@ -5285,7 +5288,7 @@ function build3D(maxFloor, opts){
     sowood: phys('#ffffff',{map:grainS, roughness:.6, envMapIntensity:.4}), paper: std('#f1e8d2',{roughness:.95, emissive:'#f1e8d2', emissiveIntensity:.12, envMapIntensity:.3}), celadon: std('#a9c4b2',{roughness:.28, envMapIntensity:.9}),
     coping: std('#cfcabb',{roughness:.85}), colBase: std('#c4bfb0',{roughness:.9}), lejiao: std('#a9a79e',{roughness:.92}), joint: std('#ada48c',{roughness:1}),
     bamboo: std('#93b25f',{roughness:.7}), bambooLeaf: std('#6f9a45',{roughness:.8, side:T.DoubleSide}), pine: std('#33613f',{roughness:.85}), plantain: std('#6fae52',{roughness:.7, side:T.DoubleSide}),
-    lamp: std('#f6e9c8',{roughness:.9, emissive:'#f0d9a0', emissiveIntensity:.55}), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
+    paperLamp: (()=>{ const m = std('#f6e9c8',{roughness:.9, emissive:'#f0d9a0', emissiveIntensity:.55}); m.userData.paperLamp = true; return m; })(), trim: std('#ebe5d8',{roughness:.6, envMapIntensity:.35})
   };
   const _fm = {}; const fenceMat = k => _fm[k] || (_fm[k] = (k==='black'||k==='bronze') ? std(FENCE_COLORS[k].hex,{roughness:.4, metalness:.65, envMapIntensity:.9}) : std(FENCE_COLORS[k].hex,{roughness:.72, envMapIntensity:.4}));
   const _sm = {};
@@ -5651,6 +5654,15 @@ function build3D(maxFloor, opts){
       }
     });
 
+    // 夜景用的室内灯：每个房间天花板下一盏暖光（按面积取最大的若干间；带一个自发光的小灯盘），点光源总数封顶
+    if(!opts.noLights){
+      const sv0 = state, svRooms = roomsCache, svSig = roomsSig, svMeta = roomsGridMeta; state = f; detectRooms(fi);
+      roomsCache.slice().sort((a,b)=>b.areaM2-a.areaM2).slice(0,6).forEach(r=>{
+        const disc = new T.Mesh(cylGeo, M.ceilLamp); disc.scale.set(.42,.02,.42); disc.position.set(r.cx/100,(base+H-1.5)/100,r.cy/100); disc.userData.nightEmit = true; cur.add(disc);
+        const pl = new T.PointLight(0xffd9a8, 0, 7.5, 1.7); pl.position.set(r.cx/100,(base+H-28)/100,r.cy/100); pl.userData.nightLight = Math.min(9, 3.5+r.areaM2*.12); cur.add(pl);
+      });
+      state = sv0; roomsCache = svRooms; roomsSig = svSig; roomsGridMeta = svMeta;
+    }
     eachSrc(f.furniture,'furniture',fu=>{
       const fy = floorY(fu.x,fu.y), elev = furnitureElev(fu);
       const grp = new T.Group(); grp.position.set(fu.x/100, (base+fy+elev)/100, fu.y/100); grp.rotation.y = -(fu.rot||0)*Math.PI/180; cur.add(grp);
@@ -5666,7 +5678,9 @@ function build3D(maxFloor, opts){
         else if(shape==='sharp'){ mesh = new T.Mesh(box, mt); mesh.scale.set(sx/100,hh/100,sz/100); mesh.position.set(...pos); }
         else { mesh = new T.Mesh(roundedGeo(sx/100,hh/100,sz/100,radFor(k)/100), mt); mesh.position.set(...pos); }
         if(o.rx||o.ry||o.rz) mesh.rotation.set((mesh.rotation.x||0)+(o.rx||0), (o.ry||0), (o.rz||0));
-        mesh.castShadow = k!=='glassM' && k!=='lamp'; mesh.receiveShadow = true; mesh.userData.solid = true; grp.add(mesh);
+        mesh.castShadow = k!=='glassM' && k!=='lamp' && k!=='paperLamp'; mesh.receiveShadow = true; mesh.userData.solid = true; grp.add(mesh);
+        if(k==='paperLamp' && !opts.noLights && !grp.userData.hasLight){   // 灯具自带一盏小范围暖光
+          grp.userData.hasLight = true; const pl = new T.PointLight(0xffd29a, 0, 4.5, 1.8); pl.position.set(0, (hh>0 ? yb+hh/2 : yb)/100, 0); pl.userData.nightLight = 3.2; grp.add(pl); }
       });
       if(!elev){   // 落地家具脚下的接触阴影
         const bm = new T.Mesh(planeGeo, blobMat); bm.rotation.x = -Math.PI/2; bm.position.y = .004; bm.scale.set((fu.w+18)/100,(fu.h+18)/100,1); bm.renderOrder=2; grp.add(bm);
@@ -5926,7 +5940,7 @@ async function ensureThree(){
     for(let i=0;i<sp.count;i++){ tmp.copy(horizon).lerp(zenith, Math.pow(Math.max(0,sp.getY(i)/900),.55)); sc.set([tmp.r,tmp.g,tmp.b], i*3); }
     sg.setAttribute('color', new lib.BufferAttribute(sc,3));
     const sky = new lib.Mesh(sg, new lib.MeshBasicMaterial({vertexColors:true, side:lib.BackSide, fog:false, depthWrite:false})); sky.renderOrder = -10; scene.add(sky);
-    scene.background = horizon; scene.fog = new lib.Fog(horizon, 70, 460);
+    scene.background = horizon; scene.fog = new lib.Fog(horizon, 70, 460); sky.userData.isSky = true;
     const camera = new lib.PerspectiveCamera(45, 1, .1, 2000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.maxPolarAngle = Math.PI*0.495; // 不让相机钻到地面以下
@@ -5934,7 +5948,7 @@ async function ensureThree(){
     const sun = new lib.DirectionalLight(0xfff1dc, 2.3);                                 // 主光偏暖，与环境光分开才有轮廓
     sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .03;
     scene.add(sun, sun.target);
-    three = {renderer, scene, camera, controls, sun, hemi, group:null, fit:null};
+    three = {renderer, scene, camera, controls, sun, hemi, sky, horizon, group:null, fit:null};
     controls.addEventListener('change', draw3D); controls.addEventListener('start', ()=>{ camFly = null; });   // 用户一动鼠标就中断飞行
     T = lib;
     return true;
@@ -5979,9 +5993,26 @@ function applySun(){
   sun.position.set(cx+Math.sin(az)*Math.cos(el)*R, Math.sin(el)*R, cz-Math.cos(az)*Math.cos(el)*R);
   sun.target.position.set(cx,0,cz);
   { const song = project.style==='song'; sun.intensity = song ? 1.6 : 2.3; three.hemi.intensity = song ? .8 : .55; three.hemi.color.setHex(song ? 0xfff3e0 : 0xfff6ea); }   // 宋式：柔光，对比低
+  { const bg = new T.Color(night ? 0x141a2a : 0xe9eff4);   // 夜景：天空/雾/背景压暗成深蓝，阳光几乎关掉，室内靠灯
+    three.scene.background = bg; three.scene.fog.color.copy(bg); if(night) three.sky.material.color.setRGB(.012,.018,.045); else three.sky.material.color.setScalar(1);
+    if(night){ sun.intensity = .06; three.hemi.intensity = .16; three.hemi.color.setHex(0x8fa0c8); }
+    three.renderer.toneMappingExposure = night ? 1.3 : 1.0; }
   const s = size*(nbCfg() && Object.values(nbCfg().c).some(v=>v&&v[0]>0) ? 2.3 : .9)+5;   // 有邻居时阴影范围要放大到九宫格
   Object.assign(sun.shadow.camera, {left:-s, right:s, top:s, bottom:-s, near:.1, far:R*2+size*2+20});
   sun.shadow.camera.updateProjectionMatrix(); draw3D();
+}
+// 夜景：开关所有 nightLight 点光源 + 自发光灯盘/灯罩（白天灯不亮）
+function applyNight(){
+  if(!three || !three.group) return;
+  let n = 0; const cap = 26;
+  three.group.traverse(o=>{
+    if(o.userData && o.userData.nightLight !== undefined){ n++; o.visible = night && n<=cap; o.intensity = night ? o.userData.nightLight : 0; }   // 白天直接隐藏：可见的光源会让每个材质的着色器多算一遍
+    if(o.isMesh && o.material && !Array.isArray(o.material) && o.material.emissive && (o.userData.nightEmit || o.material.userData.paperLamp)){ o.material.emissiveIntensity = night ? 2.2 : (o.userData.nightEmit ? .25 : .55); }
+    if(o.isMesh && o.material && !o.userData.isSky) [].concat(o.material).forEach(m=>{   // 环境贴图打底光不受 hemi 控制，夜里要把每个材质的环境反射强度压下去
+      if(m.envMapIntensity === undefined) return; if(m.userData.env0 === undefined) m.userData.env0 = m.envMapIntensity;
+      m.envMapIntensity = night ? m.userData.env0*.1 : m.userData.env0; });
+  });
+  applySun();
 }
 // 分层展开：每层沿竖直方向多拉开一段，方便看清每一层
 // 展开视图（剖视感）：每层沿竖直方向拉开 EXPLODE_GAP，屋顶再多抬 .75 个间距（和下面的墙脱开）；楼层名牌 + 四角竖向参考线（只画层与层之间的空隙，看上下层怎么对位）
@@ -6022,7 +6053,7 @@ function rebuild3D(){
   e3sig = JSON.stringify([project.floors, project.roof, project.currentFloor]);
   if(three.group){ three.scene.remove(three.group); disposeGroup(three.group); }
   three.group = build3D((drone.on || explode) ? project.floors.length-1 : (v3Pin ?? project.currentFloor), {shadowCasters:!(drone.on || explode)});   // 无人机/展开视图：永远显示整栋   // 无人机模式永远显示整栋
-  three.scene.add(three.group); applyExplode(); applySun();
+  three.scene.add(three.group); applyExplode(); applyNight();
   if(drone.on) droneBuildColliders();
   if(editMode) updateOverlay();
 }
@@ -6035,10 +6066,12 @@ async function renderShot(shot){
   const [W,H] = shot.size || [1600,1000], fl = Math.max(0, Math.min(shot.floor||0, project.floors.length-1));
   let base = 0; for(let i=0;i<fl;i++) base += project.floors[i].heightCm||300;
   if(three.group){ three.scene.remove(three.group); disposeGroup(three.group); }
-  three.group = build3D(fl, {ceiling: !!shot.ceiling, people: !!shot.people});
+  three.group = build3D(fl, {ceiling: !!shot.ceiling, people: !!shot.people, noLights: !shot.night});
+  night = !!shot.night;
   three.scene.add(three.group);
   if(shot.sun){ sunAz = shot.sun.az; sunEl = shot.sun.el; }
   fit3D();                                    // 同时按当前 sunAz/sunEl 摆好太阳和阴影范围
+  applyNight();
   three.hemi.intensity = shot.ceiling ? 1.5 : 0.9; // 室内没有直射光，把环境光抬高一点
   three.hemi.groundColor.setHex(shot.ceiling ? 0xe4ddd0 : 0x8a9a7a); // 天花板朝下的面吃的是"地面色"，室内要换成暖白，不然天花板发绿发暗
   if(three.fill){ three.scene.remove(three.fill); three.fill = null; }
@@ -6103,6 +6136,7 @@ function exCamShift(sign){   // 展开/收起后整体变高变矮：相机和�
   if(!three || !three.fit) return; const d = sign*EXPLODE_GAP*(project.floors.length-1+.75)/2; three.camera.position.y += d; three.controls.target.y += d; three.controls.update();
 }
 document.getElementById('v3Explode').onchange = (e)=>{ explode = e.target.checked; const gp = document.getElementById('v3Gap'); gp.style.display = explode ? '' : 'none'; document.getElementById('v3Floor').disabled = explode; if(!drone.on) exCamShift(explode ? 1 : -1); rebuild3D(); };
+document.getElementById('v3Night').onchange = (e)=>{ night = e.target.checked; applyNight(); };
 document.getElementById('v3Gap').oninput = (e)=>{ EXPLODE_GAP = +e.target.value; applyExplode(); };
 
 // ---- 3D 直接编辑 ----
