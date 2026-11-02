@@ -2125,6 +2125,7 @@ mainCanvas.addEventListener('pointerdown', (e)=>{
     const [snx,sny] = snapPoint(wx,wy);
     const def = FURNITURE_DEFS[currentFurnitureKind] || FURNITURE_DEFS['sofa-3'];
     const fu = {id:newId(), x:snx, y:sny, w:def.w, h:def.h, rot:0, kind:currentFurnitureKind, z:nextLayerZ()};
+    if(!e.altKey){ const ws = snapFurnWalls(fu, snx, sny); fu.x = ws.x; fu.y = ws.y; }
     state.furniture.push(fu);
     selection = {type:'furniture', id:fu.id};
     render(); showPanel();
@@ -2245,6 +2246,30 @@ function reorderLayer(type, id, action){
 // 墙体和测距本身已经有网格/正交吸附，不重复接入，避免两套吸附逻辑打架。
 const ALIGN_SNAP_PX = 6; // 吸附容差，单位是屏幕像素，与缩放无关
 function rectMinMax(a,b){ return a<=b ? {lo:a,hi:b} : {lo:b,hi:a}; }
+// 墙/柱的轴对齐矩形（含墙厚；只取水平/垂直墙）：家具贴墙吸附和防压墙用
+function furnObstacles(){
+  const out = [];
+  state.walls.forEach(w=>{ if(w.type==='fence') return; const t = (w.thickness||12)/2, hor = Math.abs(w.y2-w.y1)<1, ver = Math.abs(w.x2-w.x1)<1;
+    if(hor) out.push([Math.min(w.x1,w.x2)-t, w.y1-t, Math.max(w.x1,w.x2)+t, w.y1+t]); else if(ver) out.push([w.x1-t, Math.min(w.y1,w.y2)-t, w.x1+t, Math.max(w.y1,w.y2)+t]); });
+  (state.columns||[]).forEach(c=>{ const b = columnAabb(c); out.push([b.x1,b.y1,b.x2,b.y2]); });
+  return out;
+}
+// 贴墙吸附：家具的边离墙面 ≤ 10px 时贴上去；然后把压进墙里的部分推出来。返回 {x,y,snapped}（Alt 由调用方跳过）
+function snapFurnWalls(fu, nx, ny){
+  const b = furnitureAabb(fu,nx,ny), hw = (b.x2-b.x1)/2, hh = (b.y2-b.y1)/2, tol = Math.max(4, 10/view.scale), R = furnObstacles();
+  let x = nx, y = ny, bx = tol, by = tol, sx = false, sy = false;
+  R.forEach(r=>{
+    if(!(r[3] < ny-hh-tol || r[1] > ny+hh+tol)) [r[2]+hw, r[0]-hw].forEach(c=>{ if(Math.abs(c-nx) < bx){ bx = Math.abs(c-nx); x = c; sx = true; } });
+    if(!(r[2] < nx-hw-tol || r[0] > nx+hw+tol)) [r[3]+hh, r[1]-hh].forEach(c=>{ if(Math.abs(c-ny) < by){ by = Math.abs(c-ny); y = c; sy = true; } });
+  });
+  for(let it=0; it<4; it++){   // 防压墙：重叠超过 1cm 就沿重叠较小的方向推出
+    let moved = false;
+    R.forEach(r=>{ const ox = Math.min(x+hw, r[2]) - Math.max(x-hw, r[0]), oy = Math.min(y+hh, r[3]) - Math.max(y-hh, r[1]);
+      if(ox>1 && oy>1){ if(ox<oy) x = x < (r[0]+r[2])/2 ? r[0]-hw : r[2]+hw; else y = y < (r[1]+r[3])/2 ? r[1]-hh : r[3]+hh; moved = true; } });
+    if(!moved) break;
+  }
+  return {x, y, sx: sx || x!==nx, sy: sy || y!==ny};
+}
 function furnitureAabb(fu, cx, cy){
   const hw=fu.w/2, hh=fu.h/2, rad=(fu.rot||0)*Math.PI/180;
   const cos=Math.cos(rad), sin=Math.sin(rad);
@@ -2483,6 +2508,7 @@ window.addEventListener('pointermove', (e)=>{
       const b = furnitureAabb(fu, nx, ny);
       const snap = trySnapAlign('furniture:'+fu.id, [b.x1,(b.x1+b.x2)/2,b.x2], [b.y1,(b.y1+b.y2)/2,b.y2]);
       fu.x = nx+snap.dx; fu.y = ny+snap.dy;
+      if(!e.altKey){ const ws = snapFurnWalls(fu, nx, ny); if(ws.sx) fu.x = ws.x; if(ws.sy) fu.y = ws.y; if(ws.sx||ws.sy){ const fix = snapFurnWalls(fu, fu.x, fu.y); fu.x = fix.x; fu.y = fix.y; } }   // 贴墙优先于对齐参考线；按住 Alt 关闭
       const fb = furnitureAabb(fu, fu.x, fu.y);
       setEdgeGuides(fb.x1, fb.x2, fb.y1, fb.y2);
       render();
@@ -5909,7 +5935,7 @@ async function ensureThree(){
     sun.castShadow = true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias = -.0004; sun.shadow.normalBias = .03;
     scene.add(sun, sun.target);
     three = {renderer, scene, camera, controls, sun, hemi, group:null, fit:null};
-    controls.addEventListener('change', draw3D);
+    controls.addEventListener('change', draw3D); controls.addEventListener('start', ()=>{ camFly = null; });   // 用户一动鼠标就中断飞行
     T = lib;
     return true;
   }catch(err){
@@ -5934,7 +5960,7 @@ function fit3D(){
   setView('iso'); applySun();
 }
 // 视角预设：iso=透视俯瞰，top=正俯视，n/e/s/w=从北/东/南/西看的立面（相机在半高处平视）
-function setView(name){
+function setView(name, animate){
   const {cx,cz,size} = three.fit, totalH = three.fit.totalH + (explode ? EXPLODE_GAP*(project.floors.length-1+.75) : 0), dist = size*1.7+totalH, ty = totalH/2;
   const P = {
     iso:[cx+size*.9, totalH+size*.8, cz+size*.9, cx,ty,cz],
@@ -5942,7 +5968,8 @@ function setView(name){
     n:[cx,ty,cz-dist, cx,ty,cz], s:[cx,ty,cz+dist, cx,ty,cz],
     e:[cx+dist,ty,cz, cx,ty,cz], w:[cx-dist,ty,cz, cx,ty,cz]
   }[name];
-  three.camera.position.set(P[0],P[1],P[2]); three.controls.target.set(P[3],P[4],P[5]); three.controls.update(); draw3D();
+  if(animate) flyCam(new T.Vector3(P[0],P[1],P[2]), new T.Vector3(P[3],P[4],P[5]), 850);
+  else { three.camera.position.set(P[0],P[1],P[2]); three.controls.target.set(P[3],P[4],P[5]); three.controls.update(); draw3D(); }
 }
 // 日照：方位角（0=北，顺时针）和高度角决定阳光方向，阴影随之变化
 function applySun(){
@@ -6041,6 +6068,7 @@ btn3D.onclick = async ()=>{
   hideLayerMenu(); render(); showPanel();
   view3d.hidden = false; btn3D.classList.add('active');
   resize3D(); fit3D(); syncView3D();
+  if(!noAnim()) enterAnim();
   if(window.__syncViewSeg) window.__syncViewSeg();
 };
 // 3D 显示到哪一层 = 2D 正在编辑的那一层，两边同一个状态：3D 里换层就是切 2D 的楼层，反之亦然
@@ -6068,7 +6096,7 @@ document.getElementById('v3NbShow').onchange = (e)=>{ pushHistory(); project.nei
 document.getElementById('v3Alley').onchange = (e)=>{ pushHistory(); project.neighbors = project.neighbors || {alley:100, c:{}}; project.neighbors.alley = Math.max(0, +e.target.value||0); syncView3D(); };
 document.getElementById('v3Style').onchange = (e)=>{ pushHistory(); project.style = e.target.value; syncView3D(); if(typeof updateMetrics==='function') updateMetrics(true); };
 document.getElementById('v3Floor').onchange = (e)=>{ switchFloor(+e.target.value); syncView3D(); };
-document.querySelectorAll('#view3dBar [data-view]').forEach(b=> b.onclick = ()=>{ setView(b.dataset.view); document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
+document.querySelectorAll('#view3dBar [data-view]').forEach(b=> b.onclick = ()=>{ setView(b.dataset.view, true); document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
 ['v3ViewMore','v3Nb'].forEach(id=>{ const b=document.getElementById(id); b.onclick=(e)=>{ e.stopPropagation(); const w=b.closest('.vpopwrap'), was=w.classList.contains('open'); document.querySelectorAll('.vpopwrap.open').forEach(x=>x.classList.remove('open')); if(!was) w.classList.add('open'); }; });
 document.addEventListener('pointerdown', e=>{ if(!e.target.closest('.vpopwrap')) document.querySelectorAll('.vpopwrap.open').forEach(w=>w.classList.remove('open')); });
 function exCamShift(sign){   // 展开/收起后整体变高变矮：相机和注视点一起上下挪半个增量，画面大致保持原来的取景
@@ -6081,6 +6109,40 @@ document.getElementById('v3Gap').oninput = (e)=>{ EXPLODE_GAP = +e.target.value;
 // 思路：3D 只是 2D 数据生成的结果，所以不另写一套编辑逻辑——3D 里的鼠标位置换算成 2D 世界坐标，
 // 转成"假的"2D 鼠标事件交给原来的处理函数（选择/拖动/吸附/撤销/画墙/摆家具/开门窗都是现成的）；
 // 点选用 3D 射线，点中哪个元素就通过 hitOverride 告诉 2D 逻辑"命中的是它"。
+// ---- 相机平滑飞行 / 2D→3D 转场 ----
+const noAnim = ()=> !!window.__HOUSE_NOANIM || !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const easeIO = t=> t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+let camFly = null;
+function camLerp(A, B, e){   // 绕目标点做球坐标插值：镜头沿弧线环绕，不是直线穿过去
+  const t = A.t.clone().lerp(B.t, e), sa = new T.Spherical().setFromVector3(A.p.clone().sub(A.t)), sb = new T.Spherical().setFromVector3(B.p.clone().sub(B.t));
+  let dth = sb.theta-sa.theta; dth = Math.atan2(Math.sin(dth), Math.cos(dth));
+  const sp = new T.Spherical(sa.radius+(sb.radius-sa.radius)*e, sa.phi+(sb.phi-sa.phi)*e, sa.theta+dth*e);
+  three.camera.position.copy(t).add(new T.Vector3().setFromSpherical(sp)); three.camera.lookAt(t); three.controls.target.copy(t);
+}
+function flyCam(pos, target, ms, done){
+  const c = three.camera, ctl = three.controls;
+  if(noAnim() || drone.on){ c.position.copy(pos); ctl.target.copy(target); ctl.update(); draw3D(); if(done) done(); return; }
+  const f = camFly = {t0:performance.now(), ms:ms||800, A:{p:c.position.clone(), t:ctl.target.clone()}, B:{p:pos, t:target}, done};
+  const step = ()=>{ if(camFly!==f) return; const k = Math.min(1,(performance.now()-f.t0)/f.ms); camLerp(f.A, f.B, easeIO(k)); draw3D();
+    if(k<1) requestAnimationFrame(step); else { camFly = null; ctl.update(); if(f.done) f.done(); } };
+  requestAnimationFrame(step);
+}
+// 与当前 2D 视口完全重合的正俯视位姿：透视相机在这个高度下，地面可视高度 = 2D 视口高度
+function planPose(){
+  const W = mainCanvas.clientWidth, H = mainCanvas.clientHeight, [wx,wy] = screenToWorld(W/2,H/2), y = droneBases()[project.currentFloor]/100;
+  const dist = (H/view.scale/100)/2/Math.tan(three.camera.fov/2*Math.PI/180);
+  return {p:new T.Vector3(wx/100, y+dist, wy/100+1e-4), t:new T.Vector3(wx/100, y, wy/100)};
+}
+function enterAnim(){   // 先把 3D 相机对准 2D 画面（交叉淡入后看起来是同一幅图），再弧线环绕到斜俯视，墙从地面「长」出来
+  const ctl = three.controls, cam = three.camera, B = {p:cam.position.clone(), t:ctl.target.clone()}, A = planPose(), g = three.group;
+  view3d.style.transition = 'none'; view3d.style.opacity = '0'; g.scale.y = .001; camLerp(A, A, 0); draw3D(); ctl.enabled = false; void view3d.offsetWidth;
+  view3d.style.transition = 'opacity .42s ease'; view3d.style.opacity = '1';
+  const t0 = performance.now() + 420, tick = ()=>{
+    const t = performance.now()-t0; if(t<0){ requestAnimationFrame(tick); return; }
+    const k = Math.min(1, t/1700); camLerp(A, B, easeIO(Math.min(1,k/.85))); three.group.scale.y = Math.max(.001, easeIO(Math.min(1,Math.max(0,(k-.1)/.55)))); draw3D();
+    if(k<1) requestAnimationFrame(tick); else { three.group.scale.y = 1; ctl.enabled = true; ctl.update(); view3d.style.transition = ''; view3d.style.opacity = ''; draw3D(); }
+  }; requestAnimationFrame(tick);
+}
 let editMode = false, e3 = null, e3sig = '', e3rq = 0, e3hover = null, e3raf = 0, e3bound = false, e3needFull = false;
 const E3_FAST = {column:'columns', furniture:'furniture', tree:'trees', person:'people', stair:'stairs'};    // 拖动时只平移网格、不整体重建的类型
 const E3_ARR = {column:'columns', furniture:'furniture', tree:'trees', person:'people', stair:'stairs', area:'areas', roof:'roofs', wall:'walls', opening:'openings'};
