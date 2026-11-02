@@ -5542,9 +5542,11 @@ function build3D(maxFloor, opts){
           }
           addR(FM.stone, wl.x1+ux*sc, base+o.sill-1.6, wl.y1+uz*sc, ww+8, 3.2, t+7, ry, cur, .4);
         }
+        // 相邻的两个门（门洞相接/重叠）= 双开门：共用的那一侧不做门套，门扇一直延伸到中缝，中间不再冒出一根门套立柱
+        const oi_ = ops.indexOf(o), pv_ = ops[oi_-1], nx2_ = ops[oi_+1], isD_ = q=> q && q.kind==='door', joinL = o.kind==='door' && isD_(pv_) && o.a-pv_.b<4, joinR = o.kind==='door' && isD_(nx2_) && nx2_.a-o.b<4;
         if(o.kind==='door' && o.dst!=='gezi'){   // 门扇：绕铰链转动；只在步行模式里显示（平时不画，免得挡住户内视线、也不改变结构图）
-          const op_ = f.openings.find(q=>q.id===o.id) || {}, hinge = op_.hinge||0, swing = op_.swing||1, jw_ = 3.2, w_ = o.b-o.a-2*jw_, hgt = o.top-jw_;
-          const ux_ = ux, uz_ = uz, nx_ = -uz, nz_ = ux, hp = hinge===0 ? o.a+jw_ : o.b-jw_, pivot = new T.Group();
+          const op_ = f.openings.find(q=>q.id===o.id) || {}, hinge = op_.hinge||0, swing = op_.swing||1, jw_ = 3.2, eL_ = o.a+(joinL?0:jw_), eR_ = o.b-(joinR?0:jw_), w_ = eR_-eL_, hgt = o.top-jw_;
+          const ux_ = ux, uz_ = uz, nx_ = -uz, nz_ = ux, hp = hinge===0 ? eL_ : eR_, pivot = new T.Group();
           pivot.position.set((wl.x1+ux_*hp)/100, base/100, (wl.y1+uz_*hp)/100);
           const dc = hinge===0 ? [ux_,uz_] : [-ux_,-uz_], dO = [swing*nx_, swing*nz_], ang = d=> Math.atan2(-d[1], d[0]);
           let a0 = ang(dc), a1 = ang(dO); if(a1-a0>Math.PI) a1 -= Math.PI*2; if(a0-a1>Math.PI) a1 += Math.PI*2;
@@ -5556,7 +5558,7 @@ function build3D(maxFloor, opts){
         }
         if(o.kind==='door'){   // 门套：两侧立框 + 门头，比直接一个洞更像"做过收口"
           const jw=3.2, dep=t+1.4, jb=(sp,yc,sl,sy)=> addR(FM.trim, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, dep, ry, cur, .3);
-          jb(o.a+jw/2,o.top/2,jw,o.top); jb(o.b-jw/2,o.top/2,jw,o.top); jb((o.a+o.b)/2,o.top-jw/2,o.b-o.a,jw);
+          if(!joinL) jb(o.a+jw/2,o.top/2,jw,o.top); if(!joinR) jb(o.b-jw/2,o.top/2,jw,o.top); jb((o.a+o.b)/2,o.top-jw/2,o.b-o.a,jw);
           if(o.dst==='gezi'){   // 格子门（宋式）：每扇下部实心裙板，上部竖向+横向棂条，后衬宣纸
             const ww2 = o.b-o.a, nl = ww2>=160 ? 4 : 2, lw2 = ww2/nl, dm = (m,sp,yc,sl,sy,sd)=>{ const q = addR(m, wl.x1+ux*sp, base+yc, wl.y1+uz*sp, sl, sy, sd, ry, cur, .3); q.userData.solid = false; return q; };
             const skirt = 40, topY = o.top-jw, lat0 = skirt+4, lat1 = topY-4;
@@ -5790,6 +5792,11 @@ function build3D(maxFloor, opts){
       const zf = tall ? -1 : 1;
       const addS = (m,cx,cy,cz,sx,sy,sz,ry,parent,rad)=> addR(m,cx,cy,cz*zf,sx,sy,sz,ry,parent,rad);   // z 乘 zf：竖长楼梯在局部坐标里镜像 z，而不是镜像整个组
       const double = (st.style||'single')==='double', cf = stairComfort(st, H);
+      // 立柱要落在实地上：上层楼梯正好在下层楼梯的楼梯井上方时，这里没有楼板，立柱会悬空；落脚点没有楼板就不画
+      const slabCover = fi>0 ? mergeRects(computeCoverRects(fi)) : null;
+      const postHasFloor = (lx,lz)=>{ if(!slabCover) return true; grp.updateMatrixWorld(true);
+        const c0 = core.localToWorld(new T.Vector3(0,0,0)), v = core.localToWorld(new T.Vector3(lx/100,0,lz*(tall?-1:1)/100)).sub(c0), px = (st.x1+st.x2)/2+v.x*100, py = (st.y1+st.y2)/2+v.z*100;
+        return slabCover.some(r=> px>=r.x && px<r.x+r.w && py>=r.y && py<r.y+r.h); };
       const tm = stairMat(o.treadMat), sm = stairMat(o.stringerMat), n = cf.n, tT = o.treadT, nos = o.nosing;
       // ---- 踏步路径：每一级 = {x0,x1 沿行进方向, z0,z1 横向, top 踏面高, dir 行进方向(+1/-1)}；双跑第二跑 dir=-1 ----
       const runL = double ? a-b/2 : a, nPer = double ? n : n, steps = [];
@@ -5819,7 +5826,7 @@ function build3D(maxFloor, opts){
         if(o.under==='solid'||o.under==='storage') addS(tm, px0+pw/2, H/4, 0, pw, H/2, b, 0, core, .6).userData.walk = true;
         else addS(tm, px0+pw/2, H/2-tT/2, 0, pw, tT, b, 0, core, .5).userData.walk = true;
         if(o.under==='open'){
-          [-1,1].forEach(sx=> [-1,1].forEach(sz=> addS(sm, sx>0 ? a/2-5 : px0+5, H/4-tT/2, sz*(b/2-5), 7, H/2-tT, 7, 0, core, .8)));   // 平台下四根立柱
+          [-1,1].forEach(sx=> [-1,1].forEach(sz=>{ if(postHasFloor(sx>0 ? a/2-5 : px0+5, sz*(b/2-5))) addS(sm, sx>0 ? a/2-5 : px0+5, H/4-tT/2, sz*(b/2-5), 7, H/2-tT, 7, 0, core, .8); }));   // 平台下四根立柱（落脚点没有楼板就不画）
         }
       }
       // ---- 梯下：斜梁（open）/ 柜门（storage）/ 悬挑（cantilever 没有斜梁，踏板直接从墙里挑出来）----
