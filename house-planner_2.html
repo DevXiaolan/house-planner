@@ -5552,7 +5552,7 @@ function build3D(maxFloor, opts){
           let a0 = ang(dc), a1 = ang(dO); if(a1-a0>Math.PI) a1 -= Math.PI*2; if(a0-a1>Math.PI) a1 += Math.PI*2;
           const leaf = new T.Mesh(box, SONG ? FM.wood : FM.cabW); leaf.scale.set(w_/100, hgt/100, .04); leaf.position.set(w_/200, hgt/200, 0); leaf.castShadow = leaf.receiveShadow = true;
           const knob = new T.Mesh(sphGeo, FM.brass); knob.scale.setScalar(.05); knob.position.set(w_/100-.07, 1.0, .035); pivot.add(leaf, knob);
-          const door = {pivot, a0, a1, cur:a1, open:true, L:w_/100, id:o.id, fi};
+          const door = {pivot, a0, a1, cur:a1, open:true, L:w_/100, id:o.id, fi, y0:base/100, h:hgt/100};
           pivot.rotation.y = a1; pivot.visible = false; pivot.userData.doorLeaf = door; leaf.userData.doorRef = door; knob.userData.doorRef = door; leaf.userData.src = knob.userData.src = {type:'opening', id:o.id, fi};
           cur.add(pivot); (g.userData.doors = g.userData.doors||[]).push(door);
         }
@@ -6991,7 +6991,11 @@ function walkGroundAt(x,z,feet){   // 脚下可踩的最高面（高度不超过
 function walkDoorEnd(d){ const p = d.pivot.getWorldPosition(drone.walkW); return [p.x, p.z, p.x+Math.cos(d.cur)*d.L, p.z-Math.sin(d.cur)*d.L]; }
 function walkDoorPush(P){   // 门扇是一条线段：人（圆）离线段太近就推开
   const doors = three.group.userData.doors||[];
-  for(const d of doors){ if(!d.pivot.visible) continue; const [x0,z0,x1,z1] = walkDoorEnd(d), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1), cx = x0+dx*t, cz = z0+dz*t, dd = Math.hypot(P.x-cx,P.z-cz), R = WALK_R*.85;
+  const feet = drone.feet;
+  for(const d of doors){ if(!d.pivot.visible) continue;
+    if(feet+1.7 <= d.y0 || feet >= d.y0+d.h) continue;   // 只管和人身体在同一高度的门扇：别的楼层同一平面位置的门不算（以前不分楼层，二楼会被一楼的门扇推开）
+    if(d.open) continue;                                   // 开着的门不挡人：真实使用时可以把门推到贴墙，这里不做推门动画，直接让人穿过；关着才是一堵门
+    const [x0,z0,x1,z1] = walkDoorEnd(d), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1), cx = x0+dx*t, cz = z0+dz*t, dd = Math.hypot(P.x-cx,P.z-cz), R = WALK_R*.85;
     if(dd<R){ const k = dd>1e-5 ? (R-dd)/dd : 0; if(dd>1e-5){ P.x += (P.x-cx)*k; P.z += (P.z-cz)*k; } else { P.x += -dz/Math.sqrt(l2)*R; P.z += dx/Math.sqrt(l2)*R; } } }
 }
 function walkStep(dt){
