@@ -5552,8 +5552,8 @@ function build3D(maxFloor, opts){
           let a0 = ang(dc), a1 = ang(dO); if(a1-a0>Math.PI) a1 -= Math.PI*2; if(a0-a1>Math.PI) a1 += Math.PI*2;
           const leaf = new T.Mesh(box, SONG ? FM.wood : FM.cabW); leaf.scale.set(w_/100, hgt/100, .04); leaf.position.set(w_/200, hgt/200, 0); leaf.castShadow = leaf.receiveShadow = true;
           const knob = new T.Mesh(sphGeo, FM.brass); knob.scale.setScalar(.05); knob.position.set(w_/100-.07, 1.0, .035); pivot.add(leaf, knob);
-          const door = {pivot, a0, a1, cur:a1, open:true, L:w_/100, id:o.id, fi, y0:base/100, h:hgt/100};
-          pivot.rotation.y = a1; pivot.visible = false; pivot.userData.doorLeaf = door; leaf.userData.doorRef = door; knob.userData.doorRef = door; leaf.userData.src = knob.userData.src = {type:'opening', id:o.id, fi};
+          const door = {pivot, a0, a1, cur:a0, open:false, L:w_/100, id:o.id, fi, y0:base/100, h:hgt/100};
+          pivot.rotation.y = a0; pivot.visible = false; pivot.userData.doorLeaf = door; leaf.userData.doorRef = door; knob.userData.doorRef = door; leaf.userData.src = knob.userData.src = {type:'opening', id:o.id, fi};
           cur.add(pivot); (g.userData.doors = g.userData.doors||[]).push(door);
         }
         if(o.kind==='door'){   // 门套：两侧立框 + 门头，比直接一个洞更像"做过收口"
@@ -6470,6 +6470,35 @@ window.addEventListener('keydown', (e)=>{   // 3D 里按 R 旋转选中的家具
 // 规范类阈值各地不同，这里只放一个参考值（窗地比 1/7，见佛山宅基地自建房技术指南），改下面常量即可。
 var mSig = '', mTimer = 0, mData = null;
 const M_FU_MAX = .2, M_WALL_MIN = .6, M_WIN_MIN = 1/7, M_WIN_NEED = /卧|起居|客厅|厨/;
+function doorSwingIssues(f){
+  const out = [], jw = 3.2, rects = [];
+  f.walls.forEach(w=>{ if(w.type==='fence') return; const t = (w.thickness||12)/2, hor = Math.abs(w.y2-w.y1)<1, ver = Math.abs(w.x2-w.x1)<1;
+    if(hor) rects.push({id:w.id, x1:Math.min(w.x1,w.x2)-t, y1:w.y1-t, x2:Math.max(w.x1,w.x2)+t, y2:w.y1+t}); else if(ver) rects.push({id:w.id, x1:w.x1-t, y1:Math.min(w.y1,w.y2)-t, x2:w.x1+t, y2:Math.max(w.y1,w.y2)+t}); });
+  const inFurn = (x,y,u)=>{ const a = -(u.rot||0)*Math.PI/180, dx = x-u.x, dy = y-u.y, lx = dx*Math.cos(a)-dy*Math.sin(a), ly = dx*Math.sin(a)+dy*Math.cos(a); return Math.abs(lx)<=u.w/2 && Math.abs(ly)<=u.h/2; };
+  const FH = u=>{ const d = FURNITURE_DEFS[u.kind]||{}; return {lo: furnitureElev(u), hi: furnitureElev(u)+furnitureHeight(u, f.heightCm||300), car: d.icon==='car'}; };
+  const leaves = [];
+  f.openings.forEach(o=>{
+    if(o.kind!=='door') return; const w = f.walls.find(x=>x.id===o.wallId); if(!w || w.type==='fence') return;
+    const len = Math.hypot(w.x2-w.x1,w.y2-w.y1)||1, ang = Math.atan2(w.y2-w.y1,w.x2-w.x1), hinge = o.hinge||0, swing = o.swing||1, c = o.t*len, half = o.width/2, L = o.width-2*jw;
+    const hp = wallPoint(w, (hinge===0 ? c-half+jw : c+half-jw)/len), cA = hinge===0 ? ang : ang+Math.PI, oA = ang+swing*Math.PI/2;
+    let d = oA-cA; while(d>Math.PI) d -= 2*Math.PI; while(d<-Math.PI) d += 2*Math.PI;
+    const pt = (rad,fr)=>{ const a = cA+d*fr; return [hp[0]+Math.cos(a)*rad, hp[1]+Math.sin(a)*rad]; };
+    const tag = '门 ('+Math.round(wallPoint(w,o.t)[0])+', '+Math.round(wallPoint(w,o.t)[1])+')', hitF = new Set(); let hitWall = null;
+    for(let fr=.1; fr<=1.001; fr+=.15) for(const rad of [L*.3,L*.6,L*.95]){ const [x,y] = pt(rad,fr);
+      f.furniture.forEach(u=>{ const h = FH(u); if(h.car || h.hi<8 || h.lo>=190) return; if(h.lo<170 && inFurn(x,y,u)) hitF.add((FURNITURE_DEFS[u.kind]||{}).label||'家具'); });
+      (f.columns||[]).forEach(cc=>{ if(Math.hypot(x-cc.x,y-cc.y) < Math.max(cc.w,cc.d||cc.w)/2) hitF.add('柱'); });
+      rects.forEach(r=>{ if(r.id===w.id) return; if(x>r.x1 && x<r.x2 && y>r.y1 && y<r.y2) hitWall = true; }); }
+    if(hitF.size) out.push(tag+' 开启时会扫到：'+[...hitF].join('、'));
+    if(hitWall) out.push(tag+' 开启时门扇会撞到墙');
+    const e = pt(L,1), seg = {x0:hp[0], y0:hp[1], x1:e[0], y1:e[1], tag, wid:w.id}; leaves.push(seg);
+    // 开到底的门扇到最近的别的墙的净距：25~70cm 是「窄缝」（贴墙放平 ≤25cm 是正常的）
+    let best = 1e9; rects.forEach(r=>{ if(r.id===w.id) return; for(let k=.15;k<=1.001;k+=.17){ const px = seg.x0+(seg.x1-seg.x0)*k, py = seg.y0+(seg.y1-seg.y0)*k, dx = Math.max(r.x1-px,0,px-r.x2), dy = Math.max(r.y1-py,0,py-r.y2), dd = Math.hypot(dx,dy); if(dd>1 && dd<best) best = dd; } });
+    if(best>25 && best<70) out.push(tag+' 开到底后，门扇和旁边的墙之间留了 '+Math.round(best)+'cm 的窄缝：人过不去、又积灰（建议让门扇贴墙，≤25cm；或留够 ≥70cm）');   // ≤25cm 视为贴墙放平，是正常做法
+  });
+  const segD = (a,b)=>{ const f2 = (p,q,r,s,t,u)=>{ const dx=q-p, dy=r-s; return 0; }; const pts = [0,.25,.5,.75,1].map(k=>[a.x0+(a.x1-a.x0)*k, a.y0+(a.y1-a.y0)*k]), qts = [0,.25,.5,.75,1].map(k=>[b.x0+(b.x1-b.x0)*k, b.y0+(b.y1-b.y0)*k]); let m = 1e9; pts.forEach(p=>qts.forEach(q=>{ m = Math.min(m, Math.hypot(p[0]-q[0],p[1]-q[1])); })); return m; };
+  for(let i=0;i<leaves.length;i++) for(let j=i+1;j<leaves.length;j++){ const A = leaves[i], B = leaves[j]; if(A.wid===B.wid && Math.hypot(A.x0-B.x0,A.y0-B.y0)<2) continue; if(Math.hypot(A.x0-B.x0,A.y0-B.y0)>260) continue; if(segD(A,B)<12 && Math.hypot(A.x0-B.x0,A.y0-B.y0)>6) out.push(A.tag+' 与 '+B.tag+' 开到底时门扇互相打架'); }
+  return out;
+}
 function computeMetrics(){
   const sv = {state, roomsCache, roomsSig, roomsGridMeta}, warns = [];
   const floors = project.floors.map((f,fi)=>{
@@ -6498,6 +6527,8 @@ function computeMetrics(){
     if(project.style==='song' && wallA>0 && 1-occA/wallA<M_WALL_MIN) warns.push(`${f.name} 墙面留白 ${Math.round((1-occA/wallA)*100)}%（宋式建议 ≥60%；门窗+靠墙家具占了 ${Math.round(occA/wallA*100)}%）`);
     if(project.style==='song'){ const net = rooms.reduce((a,r)=>a+r.area,0); if(net>0 && fuA/net>M_FU_MAX) warns.push(`${f.name} 家具占地 ${Math.round(fuA/net*100)}%（宋式建议 ≤20%，留白为要）`); rooms.forEach(r=>{ if(r.name && r.area>0 && r.fu/r.area>M_FU_MAX) warns.push(`${f.name} ${r.name}：家具占地 ${Math.round(r.fu/r.area*100)}%（宋式建议 ≤20%）`); }); }
     rooms.forEach(r=>{ if(M_WIN_NEED.test(r.name) && r.win/r.area < M_WIN_MIN) warns.push(`${f.name} ${r.name}：窗地比 ${r.win>0 ? '1/'+(r.area/r.win).toFixed(1) : '无窗'}（建议 ≥1/7）`); });
+    // 门扇开启检查：每扇门在 2D 平面上扫出一个四分之一圆。扫到家具、撞墙、和别的门打架、开着的门扇和墙之间留不出人的宽度，都是设计缺陷
+    doorSwingIssues(f).forEach(m=> warns.push(f.name+' '+m));
     let stairWarn = 0; f.stairs.forEach(st=>{ const c = stairComfort(st, f.heightCm||300); if(c.warn.length){ stairWarn++; warns.push(`${f.name} 楼梯：${c.warn[0]}`); } });
     return {name:f.name, gross, net:rooms.reduce((s,r)=>s+r.area,0), rooms, winN, doorN, fu:fuA, wallA, occA, colN:(f.columns||[]).length};
   });
@@ -6989,14 +7020,31 @@ function walkGroundAt(x,z,feet){   // 脚下可踩的最高面（高度不超过
   return best;
 }
 function walkDoorEnd(d){ const p = d.pivot.getWorldPosition(drone.walkW); return [p.x, p.z, p.x+Math.cos(d.cur)*d.L, p.z-Math.sin(d.cur)*d.L]; }
-function walkDoorPush(P){   // 门扇是一条线段：人（圆）离线段太近就推开
-  const doors = three.group.userData.doors||[];
-  const feet = drone.feet;
+// 门扇是一条绕铰链的线段，挡人也被人推：人（圆）顶到门扇 → 门扇绕铰链被推开（碰到限位或家具/墙就推不动，人被挡住）。
+// 只管和身体在同一高度的门扇（别的楼层同一平面位置的门不算）。
+function walkLeafPts(d, ang){ const p = d.pivot.getWorldPosition(drone.walkW); return [p.x, p.z, p.x+Math.cos(ang)*d.L, p.z-Math.sin(ang)*d.L]; }
+function walkLeafHitsSolid(d, ang){   // 门扇中心线上取点，落在墙/柱/家具实体里就算撞上（离铰链 15% 以内是门套，不算）
+  const [x0,z0,x1,z1] = walkLeafPts(d, ang), v = drone.walkL;
+  for(const hy of [.45,1.1,1.75]){ if(d.y0+hy > d.y0+d.h) continue;
+    for(const f of [.2,.35,.5,.65,.8,.97]){ const x = x0+(x1-x0)*f, z = z0+(z1-z0)*f, y = d.y0+hy;
+      for(const c of drone.colliders){ const a = c.aabb; if(x<a.min.x-.02||x>a.max.x+.02||y<a.min.y||y>a.max.y||z<a.min.z-.02||z>a.max.z+.02) continue;
+        v.set(x,y,z).applyMatrix4(c.inv); const e = .025/Math.max(c.m.elements[0],.01); if(v.x>c.bmin.x+e && v.x<c.bmax.x-e && v.y>c.bmin.y && v.y<c.bmax.y && v.z>c.bmin.z+e && v.z<c.bmax.z-e) return true; } } }
+  return false;
+}
+function walkDoorPush(P){
+  const doors = three.group.userData.doors||[], feet = drone.feet, R = WALK_R*.9;
   for(const d of doors){ if(!d.pivot.visible) continue;
-    if(feet+1.7 <= d.y0 || feet >= d.y0+d.h) continue;   // 只管和人身体在同一高度的门扇：别的楼层同一平面位置的门不算（以前不分楼层，二楼会被一楼的门扇推开）
-    if(d.open) continue;                                   // 开着的门不挡人：真实使用时可以把门推到贴墙，这里不做推门动画，直接让人穿过；关着才是一堵门
-    const [x0,z0,x1,z1] = walkDoorEnd(d), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1), cx = x0+dx*t, cz = z0+dz*t, dd = Math.hypot(P.x-cx,P.z-cz), R = WALK_R*.85;
-    if(dd<R){ const k = dd>1e-5 ? (R-dd)/dd : 0; if(dd>1e-5){ P.x += (P.x-cx)*k; P.z += (P.z-cz)*k; } else { P.x += -dz/Math.sqrt(l2)*R; P.z += dx/Math.sqrt(l2)*R; } } }
+    if(feet+1.7 <= d.y0 || feet >= d.y0+d.h) continue;
+    for(let it=0; it<3; it++){
+      const [x0,z0,x1,z1] = walkLeafPts(d, d.cur), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1), cx = x0+dx*t, cz = z0+dz*t, dd = Math.hypot(P.x-cx,P.z-cz);
+      if(dd>=R) break;
+      const nx = dd>1e-5 ? (P.x-cx)/dd : -dz/Math.sqrt(l2), nz = dd>1e-5 ? (P.z-cz)/dd : dx/Math.sqrt(l2), pen = R-dd, r = Math.max(.08, t*d.L);
+      const tx = -Math.sin(d.cur), tz = -Math.cos(d.cur);                       // 门扇上该点随转角变化的方向（单位转角、单位半径）
+      const dth = clampN(-((nx*tx+nz*tz)*pen)/r, -.25, .25), lo = Math.min(d.a0,d.a1), hi = Math.max(d.a0,d.a1), nc = clampN(d.cur+dth, lo, hi);
+      if(Math.abs(nc-d.cur)>1e-4 && !walkLeafHitsSolid(d, nc)){ d.cur = nc; d.pivot.rotation.y = nc; d.hold = true; d.pushed = true; }   // 门被人推动了：停在这个角度，不再自动回到开/关
+      else { P.x += nx*pen; P.z += nz*pen; break; }                             // 推不动（限位/撞到东西）：人被挡出来
+    }
+  }
 }
 function walkStep(dt){
   dt = clampN(dt,0,.05); const k = drone.keys, P = drone.pos, ax = n=>k.has(n)?1:0, tmpP = drone.walkP;   // 步行自己的临时向量：不能借用 drone.tmp（droneResolve 内部会覆盖它）
@@ -7014,7 +7062,13 @@ function walkStep(dt){
   if(g>drone.feet){ drone.feet += (g-drone.feet)*Math.min(1,dt*16); if(g-drone.feet<.004) drone.feet = g; drone.vy = 0; }
   else { drone.vy -= 9.8*dt; drone.feet += drone.vy*dt; if(drone.feet<=g){ drone.feet = g; drone.vy = 0; } }
   P.y = drone.feet + WALK_EYE; drone.roll = 0; drone.vel.set(mx/dt||0, 0, mz/dt||0);
-  const doors = three.group.userData.doors||[]; doors.forEach(d=>{ d.cur += ((d.open?d.a1:d.a0)-d.cur)*Math.min(1,dt*6); d.pivot.rotation.y = d.cur; });
+  const doors = three.group.userData.doors||[];
+  doors.forEach(d=>{ if(d.hold) return; const tg = d.open ? d.a1 : d.a0, step = (tg-d.cur)*Math.min(1,dt*6); if(Math.abs(step)<1e-5) return;
+    const nc = d.cur+step, same = drone.feet+1.7>d.y0 && drone.feet<d.y0+d.h;
+    if(walkLeafHitsSolid(d, nc)){ d.stuck = true; return; }                    // 开/关的过程中碰到家具或墙：停住
+    if(same){ const [x0,z0,x1,z1] = walkLeafPts(d, nc), dx = x1-x0, dz = z1-z0, l2 = dx*dx+dz*dz||1, t = clampN(((P.x-x0)*dx+(P.z-z0)*dz)/l2,0,1);
+      if(Math.hypot(P.x-(x0+dx*t), P.z-(z0+dz*t)) < WALK_R*.9){ d.stuck = true; return; } }   // 开/关的过程中碰到人：停住，不会把人推走
+    d.stuck = false; d.cur = nc; d.pivot.rotation.y = nc; });
   droneApplyCamera();
 }
 function walkToggleDoor(){   // 对准镜头正前方 2.6m 内的门扇：开/关
@@ -7022,7 +7076,9 @@ function walkToggleDoor(){   // 对准镜头正前方 2.6m 内的门扇：开/�
   const rc = drone.rc || (drone.rc = new T.Raycaster()); rc.setFromCamera(new T.Vector2(0,0), three.camera); rc.far = 2.6;
   const meshes = []; doors.forEach(d=> d.pivot.children.forEach(c=>meshes.push(c)));
   const h = rc.intersectObjects(meshes,false)[0]; if(!h || !h.object.userData.doorRef) return false;
-  const d = h.object.userData.doorRef; d.open = !d.open; return true;
+  const d = h.object.userData.doorRef; d.hold = false; d.stuck = false;
+  d.open = Math.abs(d.cur-d.a0) <= Math.abs(d.cur-d.a1);   // 离关着近就开，离开着近就关（被人推到一半的门也一样）
+  return true;
 }
 function walkSet(on){
   drone.walk = !!on; const g = three.group; (g.userData.doors||[]).forEach(d=>{ d.pivot.visible = drone.walk; });
@@ -7037,7 +7093,7 @@ function walkSet(on){
     droneApplyCamera();
   } else { drone.pos.y = Math.max(drone.pos.y, drone.feet+1.2); }
   drone.hintUntil = performance.now()+9000;
-  const ht = document.getElementById('droneHint'); ht.innerHTML = drone.walk ? '<b>WASD</b> 行走 · <b>Shift</b> 快走 · <b>拖拽/方向键</b> 看 · <b>E 或点击</b> 开关门（正前方 2.6m 内）<br><b>P</b> 拍照 · <b>R</b> 回起点 · <b>F</b> 视野 · <b>H</b> 隐藏提示 · <b>Esc</b> 退出' : drone.defaultHint;
+  const ht = document.getElementById('droneHint'); ht.innerHTML = drone.walk ? '<b>WASD</b> 行走 · <b>Shift</b> 快走 · <b>拖拽/方向键</b> 看 · <b>E 或点击</b> 开关门（正前方 2.6m 内），<b>顶着门走</b>可以把门推开，门碰到家具/墙会停住<br><b>P</b> 拍照 · <b>R</b> 回起点 · <b>F</b> 视野 · <b>H</b> 隐藏提示 · <b>Esc</b> 退出' : drone.defaultHint;
 }
 function droneCollide(P,Vv){
   if(drone.roofs.length){          // 屋面：第一次进入屋面范围时在哪一侧，就一直待在那一侧
